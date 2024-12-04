@@ -11,7 +11,7 @@ logging.basicConfig(filename='log_forward.log', level=logging.INFO,
 LOCAL_MQTT_HOST = "localhost"
 LOCAL_MQTT_PORT = 1883
 LOCAL_MQTT_TOPIC = "miot/data"
-LOCAL_MQTT_USERNAME = "securemiot" # TODO: Configure it in the code
+LOCAL_MQTT_USERNAME = "securemiot" 
 LOCAL_MQTT_PASSWORD = "securemiot"
 
 # Remote MQTT broker configuration (with authentication)
