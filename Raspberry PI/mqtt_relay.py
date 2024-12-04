@@ -28,6 +28,7 @@ remote_client = mqtt.Client(client_id="remote_client")
 
 # Set username and password for remote broker
 remote_client.username_pw_set(REMOTE_MQTT_USERNAME, REMOTE_MQTT_PASSWORD)
+local_client.username_pw_set(LOCAL_MQTT_USERNAME, LOCAL_MQTT_PASSWORD)
 
 # Define on_connect callback for the local MQTT broker
 def on_connect_local(client, userdata, flags, rc):
