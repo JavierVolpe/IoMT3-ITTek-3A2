@@ -26,7 +26,7 @@ REMOTE_MQTT_PASSWORD = "megetmegetsikker"
 local_client = mqtt.Client(client_id="local_client")
 remote_client = mqtt.Client(client_id="remote_client")
 
-# Set username and password for remote broker
+# Set username and password for brokers
 remote_client.username_pw_set(REMOTE_MQTT_USERNAME, REMOTE_MQTT_PASSWORD)
 local_client.username_pw_set(LOCAL_MQTT_USERNAME, LOCAL_MQTT_PASSWORD)
 
