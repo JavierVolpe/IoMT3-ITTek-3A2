@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Mål Vitale Tegn</h1>
+
+<!-- Display Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<!-- CPR Number Form -->
+<form action="{{ url_for('maal_vitale_tegn') }}" method="POST">
+    <div class="mb-3">
+        <label for="cpr" class="form-label">Indtast patientens CPR-nummer</label>
+        <input type="text" class="form-control" id="cpr" name="cpr" placeholder="010203-1234" value="{{ cpr if cpr else '010101-1111' }}" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Submit</button>
+</form>
+
+<!-- Display Vital Signs Records -->
+{% if submitted %}
+    {% if cpr and records %}
+        <h2 class="mt-4">Vitale Tegn for CPR: {{ cpr }}</h2>
+        <table class="table table-striped mt-3">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>CPR-nummer</th>
+                    <th>Tidspunkt</th>
+                    <th>Puls (bpm)</th>
+                    <th>Temperatur (°C)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in records %}
+                    <tr>
+                        <td>{{ record.id }}</td>
+                        <td>{{ record.cpr_nummer }}</td>
+                        <td>{{ record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ record.puls }}</td>
+                        <td>{{ record.temperatur }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif cpr %}
+        <p>Ingen vitale tegn fundet for CPR-nummeret: <strong>{{ cpr }}</strong>.</p>
+    {% else %}
+        <p>Indtast venligst patientens CPR-nummer.</p>
+    {% endif %}
+{% endif %}
+
+{% endblock %}

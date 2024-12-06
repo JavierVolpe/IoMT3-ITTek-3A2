@@ -1,0 +1,11 @@
+__pycache__/
+bin/
+include/
+lib/
+share/
+static/
+*.log
+logs/
+db/
+venv/
+__pycache__/
