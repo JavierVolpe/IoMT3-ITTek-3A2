@@ -77,9 +77,9 @@ def logout():
 def home():
     return render_template("home.html")
 
-@app.route("/maal_vitale_tegn", methods=["GET", "POST"])
+@app.route("/vis_vitale_tegn", methods=["GET", "POST"])
 @login_required
-def maal_vitale_tegn():
+def vis_vitale_tegn():
     if request.method == "POST":
         cpr = request.form.get("cpr").strip()  # Remove any leading/trailing whitespace
         
@@ -87,7 +87,7 @@ def maal_vitale_tegn():
             # Validate CPR number format (e.g., DDMMYY-XXXX)
             if not re.match(r"^\d{6}-\d{4}$", cpr):
                 flash("CPR-nummeret er ikke i korrekt format (DDMMYY-XXXX).", "danger")
-                return render_template("maal_vitale_tegn.html", cpr=cpr, records=None, submitted=True)
+                return render_template("vis_vitale_tegn.html", cpr=cpr, records=None, submitted=True)
             
             # Fetch records for the given CPR number, ordered by tidspunkt descending
             records = VitaleTegn.query.filter_by(cpr_nummer=cpr).order_by(VitaleTegn.tidspunkt.desc()).all()
@@ -97,16 +97,27 @@ def maal_vitale_tegn():
             else:
                 flash(f"Ingen vitale tegn fundet for CPR-nummer: {cpr}", "warning")
             
-            return render_template("maal_vitale_tegn.html", cpr=cpr, records=records, submitted=True)
+            return render_template("vis_vitale_tegn.html", cpr=cpr, records=records, submitted=True)
         else:
             # Form was submitted without CPR
             flash("Indtast venligst patientens CPR-nummer.", "danger")
-            return render_template("maal_vitale_tegn.html", cpr=None, records=None, submitted=True)
+            return render_template("vis_vitale_tegn.html", cpr=None, records=None, submitted=True)
     else:
         # GET request; no form submission
-        return render_template("maal_vitale_tegn.html")
+        return render_template("vis_vitale_tegn.html")
 
+@app.route("/request_update", methods=["POST"])
+@login_required
+def request_update():
+    cpr = request.form.get("cpr").strip()
+    if cpr:
+        # TODO: Request update to ESP32 via MQTT
+        flash(f"Update requested for CPR-nummer: {cpr}", "info")
+        return redirect(url_for("vis_vitale_tegn"))
+    else:
+        flash("Ingen CPR-nummer angivet for opdatering.", "danger")
+        return redirect(url_for("vis_vitale_tegn"))
 
  
 if __name__ == "__main__":
-    app.run()
+    app.run(host='0.0.0.0', port=5000, debug=True)
