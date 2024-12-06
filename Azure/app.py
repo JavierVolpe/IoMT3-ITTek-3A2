@@ -4,11 +4,12 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import re  # For CPR number validation
-
+import paho.mqtt.client as mqtt
+from config import Config
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///db.sqlite"
-app.config["SECRET_KEY"] = "abc"
+app.config["SQLALCHEMY_DATABASE_URI"] = Config.SQLALCHEMY_DATABASE_URI
+app.config["SECRET_KEY"] = Config.SECRET_KEY
 db = SQLAlchemy()
  
 login_manager = LoginManager()
@@ -112,6 +113,16 @@ def request_update():
     cpr = request.form.get("cpr").strip()
     if cpr:
         # TODO: Request update to ESP32 via MQTT
+        try:
+            mqtt_client = mqtt.Client()
+            mqtt_client.username_pw_set(Config.MQTT_USERNAME, Config.MQTT_PASSWORD)
+            mqtt_client.connect(Config.MQTT_BROKER_URL, Config.MQTT_BROKER_PORT)
+            mqtt_client.publish(Config.MQTT_TOPIC, cpr)
+            mqtt_client.disconnect()
+        except Exception as e:
+            flash(f"Fejl ved opdatering af CPR-nummer: {cpr} {e}", "danger")
+            return redirect(url_for("vis_vitale_tegn"))
+        
         flash(f"Update requested for CPR-nummer: {cpr}", "info")
         return redirect(url_for("vis_vitale_tegn"))
     else:
