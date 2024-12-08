@@ -112,19 +112,17 @@ def vis_vitale_tegn():
 def request_update():
     cpr = request.form.get("cpr").strip()
     if cpr:
-        # TODO: Request update to ESP32 via MQTT
         try:
             mqtt_client = mqtt.Client()
             mqtt_client.username_pw_set(Config.MQTT_USERNAME, Config.MQTT_PASSWORD)
             mqtt_client.connect(Config.MQTT_BROKER_URL, Config.MQTT_BROKER_PORT)
             mqtt_client.publish(Config.MQTT_TOPIC, cpr)
             mqtt_client.disconnect()
+            flash(f"Opdatering anmodet for CPR-nummer: {cpr}", "info")
+            return redirect(url_for("vis_vitale_tegn"))
         except Exception as e:
             flash(f"Fejl ved opdatering af CPR-nummer: {cpr} {e}", "danger")
             return redirect(url_for("vis_vitale_tegn"))
-        
-        flash(f"Update requested for CPR-nummer: {cpr}", "info")
-        return redirect(url_for("vis_vitale_tegn"))
     else:
         flash("Ingen CPR-nummer angivet for opdatering.", "danger")
         return redirect(url_for("vis_vitale_tegn"))
