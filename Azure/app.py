@@ -8,7 +8,8 @@ import paho.mqtt.client as mqtt
 from config import Config
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = Config.SQLALCHEMY_DATABASE_URI
+app.config.from_object(Config)
+#app.config["SQLALCHEMY_DATABASE_URI"] = Config.SQLALCHEMY_DATABASE_URI
 app.config["SECRET_KEY"] = Config.SECRET_KEY
 db = SQLAlchemy()
  
