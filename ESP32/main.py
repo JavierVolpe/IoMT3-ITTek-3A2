@@ -3,7 +3,7 @@ from time import sleep
 from umqttsimple import MQTTClient
 
 test_mode = False 
-
+ 
 # Pin Definitions
 temperature_pin = 4         # DS18B20 an GPIO 4
 imu_sda_pin = 21            # SDA an GPIO 21
