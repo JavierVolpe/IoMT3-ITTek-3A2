@@ -9,8 +9,9 @@ class Config:
 
     #SQLALCHEMY_DATABASE_URI = "sqlite:///db.sqlite"
     SQLALCHEMY_DATABASE_URI = (
-        "mssql+pyodbc://myadmin:M987yadmin.@miot3.database.windows.net:1433/records"
-        "?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no&Connection+Timeout=30"
+        "mssql+pyodbc://SA:M987yadmin.@20.254.112.3:1433/vitale_tegn"
+        "?driver=ODBC+Driver+18+for+SQL+Server"
+        "&Encrypt=yes&TrustServerCertificate=yes"
     )
     SECRET_KEY = "abc"
     

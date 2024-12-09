@@ -35,7 +35,6 @@ class VitaleTegn(db.Model):
         return f"<VitaleTegn {self.cpr_nummer} - {self.puls} bpm - {self.temperatur}°C>"
 
  
-#HEJ :)
 db.init_app(app)
  
  
