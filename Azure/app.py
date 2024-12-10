@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, url_for, redirect, flash, jsonify
+from flask import Flask, render_template, request, url_for, redirect, flash, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,12 +14,17 @@ import hashlib
 
 app = Flask(__name__)
 app.config.from_object(Config)
-#app.config["SECRET_KEY"] = Config.SECRET_KEY
+app.config["SECRET_KEY"] = Config.SECRET_KEY
 db = SQLAlchemy(app)  # Initialize SQLAlchemy with the app's config
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"  # Ensure a defined login view
+
+# Context Processor to inject dark_mode into all templates
+@app.context_processor
+def inject_dark_mode():
+    return {'dark_mode': session.get('dark_mode', False)}
 
 # Helper function to derive a key of appropriate length
 def get_aes_key():
@@ -99,6 +104,14 @@ with app.app_context():
 @login_manager.user_loader
 def load_user(user_id):
     return Users.query.get(int(user_id))
+
+# Route to toggle dark mode
+@app.route('/toggle_dark_mode', methods=['POST'])
+def toggle_dark_mode():
+    # Toggle the dark_mode session variable
+    current_theme = session.get('dark_mode', False)
+    session['dark_mode'] = not current_theme
+    return redirect(request.referrer or url_for('home'))
 
 # Routes
 @app.route('/register', methods=["GET", "POST"])
@@ -180,12 +193,19 @@ def vis_vitale_tegn():
                 'cpr_nummer': decrypted_cpr,
                 'puls': record.puls,
                 'temperatur': record.temperatur,
-                'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')
+                'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')  # Formatted string
             })
 
         return render_template("vis_vitale_tegn.html", cpr=cpr, records=decrypted_records, submitted=True)
     else:
         return render_template("vis_vitale_tegn.html")
+
+
+@app.route("/fald_detektion")
+@login_required
+def fald_detektion():
+    return render_template("fald.html")
+
 
 @app.route("/request_update", methods=["POST"])
 @login_required
