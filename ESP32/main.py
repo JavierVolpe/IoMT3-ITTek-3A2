@@ -1,5 +1,5 @@
 from machine import Pin, I2C, ADC, reset
-from time import sleep, ticks_ms, ticks_add, ticks_diff
+from time import ticks_ms, ticks_add, ticks_diff
 from umqttsimple import MQTTClient
 
 test_mode = False
@@ -30,8 +30,8 @@ topic_pub = b"sundhed/data"
 topic_sub = b"sundhed/growcontrol"
 
 # Sleep Interval and Total Sleep Time
-SLEEP_INTERVAL = 1  # seconds
-TOTAL_SLEEP_TIME = 1800  # 30 minutes
+SLEEP_INTERVAL = 1000  # milliseconds (1 second)
+TOTAL_SLEEP_TIME = 1800 * 1000  # 30 minutes in milliseconds
 
 # Puls Måler Config
 ADC_PIN = 34
@@ -100,7 +100,9 @@ def measure_bpm(duration_sec=30):
             remaining_time = new_remaining
             print(f"Measurement in progress... {remaining_time} seconds remaining.")
 
-        sleep(0.1)  # Polling interval
+        # Non-blocking waiting
+        while ticks_diff(ticks_ms(), current_time) < 100:
+            client.check_msg()  # Ensure MQTT messages are checked during wait
 
     # Calculate Average BPM
     if len(beat_intervals) >= MIN_INTERVALS:
@@ -117,7 +119,7 @@ def measure_bpm(duration_sec=30):
         print(f"Measurement complete. Average BPM over {duration_sec} seconds: {avg_bpm}")
     else:
         print("Could not determine BPM. Please try again.")
-    return avg_bpm
+    return round(avg_bpm)
 
 
 def mqtt_callback(topic, msg):
@@ -164,17 +166,20 @@ client = connect_mqtt()
 
 
 def main_loop():
-    if not test_mode:
-        print("Starting not test mode")
-        while True:
-            client.check_msg()  # Check for incoming messages
-            sleep(SLEEP_INTERVAL)  # Allow time for MQTT operations
-    else:
-        print("Starting test mode")
-        while True:
-            publish_update(send=False)
-            sleep(2)
-            client.check_msg()  # Ensure incoming messages are checked
+    start_time = ticks_ms()
+    while True:
+        current_time = ticks_ms()
+        elapsed_time = ticks_diff(current_time, start_time)
+        
+        if elapsed_time < TOTAL_SLEEP_TIME:
+            client.check_msg()  # Check for incoming MQTT messages
+        else:
+            print("Total sleep time reached.")
+            break
+        
+        # Non-blocking wait to check messages every SLEEP_INTERVAL
+        while ticks_diff(ticks_ms(), current_time) < SLEEP_INTERVAL:
+            pass
 
 
 if __name__ == "__main__":
