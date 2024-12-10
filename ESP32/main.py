@@ -1,5 +1,5 @@
-from machine import Pin, I2C, ADC, reset
-from time import ticks_ms, ticks_add, ticks_diff
+from machine import Pin, I2C, ADC, reset, PWM
+from time import ticks_ms, ticks_add, ticks_diff, sleep
 from umqttsimple import MQTTClient
 
 test_mode = False
