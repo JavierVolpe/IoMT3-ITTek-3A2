@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, url_for, redirect, flash
+from flask import Flask, render_template, request, url_for, redirect, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -9,27 +9,46 @@ from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 import base64
 from config import Config
+import random
+import hashlib
 
 app = Flask(__name__)
 app.config.from_object(Config)
-app.config["SECRET_KEY"] = Config.SECRET_KEY
+#app.config["SECRET_KEY"] = Config.SECRET_KEY
 db = SQLAlchemy(app)  # Initialize SQLAlchemy with the app's config
 
 login_manager = LoginManager()
 login_manager.init_app(app)
+login_manager.login_view = "login"  # Ensure a defined login view
 
-# AES Encryption Functions
+# Helper function to derive a key of appropriate length
+def get_aes_key():
+    key = app.config["SECRET_KEY"]
+    if isinstance(key, str):
+        key = key.encode('utf-8')
+    # Ensure the key is 16, 24, or 32 bytes long for AES
+    if len(key) not in (16, 24, 32):
+        raise ValueError("SECRET_KEY must be 16, 24, or 32 bytes long for AES encryption.")
+    return key
+
+# Encryption Functions
 def encrypt_cpr(cpr_number):
-    # Ensure the key is in bytes (if it's not already)
-    cipher = AES.new(Config.SECRET_KEY, AES.MODE_EAX)
+    key = get_aes_key()
+    cipher = AES.new(key, AES.MODE_EAX)
     ciphertext, tag = cipher.encrypt_and_digest(cpr_number.encode('utf-8'))
     return base64.b64encode(cipher.nonce + tag + ciphertext).decode('utf-8')
 
 def decrypt_cpr(encrypted_cpr):
-    data = base64.b64decode(encrypted_cpr.encode('utf-8'))
-    nonce, tag, ciphertext = data[:16], data[16:32], data[32:]
-    cipher = AES.new(Config.SECRET_KEY, AES.MODE_EAX, nonce=nonce)
-    return cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8')
+    key = get_aes_key()
+    try:
+        data = base64.b64decode(encrypted_cpr.encode('utf-8'))
+        nonce, tag, ciphertext = data[:16], data[16:32], data[32:]
+        cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
+        return cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8')
+    except (ValueError, KeyError) as e:
+        # Handle incorrect decryption
+        app.logger.error(f"Decryption failed: {e}")
+        return "Decryption Error"
 
 # Models
 class Users(UserMixin, db.Model):
@@ -41,7 +60,8 @@ class VitaleTegn(db.Model):
     __tablename__ = 'vitale_tegn'
     
     id = db.Column(db.Integer, primary_key=True)
-    cpr_nummer = db.Column(db.String(256), nullable=False)  # Store encrypted CPR number
+    cpr_nummer = db.Column(db.String(256), nullable=False)  # Encrypted CPR
+    cpr_hash = db.Column(db.String(64), nullable=False, index=True)  # Hashed CPR for search
     tidspunkt = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
     puls = db.Column(db.Integer, nullable=False)
     temperatur = db.Column(db.Float, nullable=False)
@@ -50,10 +70,17 @@ class VitaleTegn(db.Model):
         return f"<VitaleTegn {self.cpr_nummer} - {self.puls} bpm - {self.temperatur}°C>"
 
     @staticmethod
+    def hash_cpr(cpr):
+        # Using plain SHA-256
+        return hashlib.sha256(cpr.encode('utf-8')).hexdigest()
+
+    @staticmethod
     def insert_data(cpr, puls, temperatur):
         encrypted_cpr = encrypt_cpr(cpr)
+        cpr_hash = VitaleTegn.hash_cpr(cpr)
         new_record = VitaleTegn(
             cpr_nummer=encrypted_cpr,
+            cpr_hash=cpr_hash,
             puls=puls,
             temperatur=temperatur
         )
@@ -62,41 +89,58 @@ class VitaleTegn(db.Model):
 
     @staticmethod
     def get_records_by_cpr(cpr):
-        encrypted_cpr = encrypt_cpr(cpr)
-        return VitaleTegn.query.filter_by(cpr_nummer=encrypted_cpr).all()
+        cpr_hash = VitaleTegn.hash_cpr(cpr)
+        return VitaleTegn.query.filter_by(cpr_hash=cpr_hash).order_by(VitaleTegn.tidspunkt.desc()).all()
 
+# Create all tables
 with app.app_context():
     db.create_all()
 
+@login_manager.user_loader
+def load_user(user_id):
+    return Users.query.get(int(user_id))
 
 # Routes
-@login_manager.user_loader
-def loader_user(user_id):
-    return Users.query.get(user_id)
-
 @app.route('/register', methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        hashed_password = generate_password_hash(request.form.get("password"), method="pbkdf2:sha1")  # Hashing the password
-        user = Users(username=request.form.get("username"),
-                     password=hashed_password)
-        db.session.add(user)
-        db.session.commit()
-        return redirect(url_for("login"))
+        username = request.form.get("username").strip()
+        password = request.form.get("password").strip()
+        if not username or not password:
+            flash("Brugernavn og adgangskode er påkrævet.", "danger")
+            return render_template("sign_up.html")
+        try:
+            hashed_password = generate_password_hash(password, method="pbkdf2:sha1")
+            user = Users(username=username, password=hashed_password)
+            db.session.add(user)
+            db.session.commit()
+            flash("Registrering lykkedes! Log ind nu.", "success")
+            return redirect(url_for("login"))
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Registration failed: {e}")
+            flash(f"Registration failed: {e}", "danger")
     return render_template("sign_up.html")
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        user = Users.query.filter_by(username=request.form.get("username")).first()
-        if user and check_password_hash(user.password, request.form.get("password")):
+        username = request.form.get("username").strip()
+        password = request.form.get("password").strip()
+        user = Users.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, password):
             login_user(user)
+            flash("Login successful.", "success")
             return redirect(url_for("home"))
+        else:
+            flash("Invalid username or password.", "danger")
     return render_template("login.html")
 
 @app.route("/logout")
+@login_required
 def logout():
     logout_user()
+    flash("You have been logged out.", "info")
     return redirect(url_for("home"))
 
 @app.route("/")
@@ -107,92 +151,109 @@ def home():
 @login_required
 def vis_vitale_tegn():
     if request.method == "POST":
-        cpr = request.form.get("cpr").strip()  # Remove any leading/trailing whitespace
+        cpr = request.form.get("cpr", "").strip()
         
-        if cpr:
-            # Validate CPR number format (e.g., DDMMYY-XXXX)
-            if not re.match(r"^\d{6}-\d{4}$", cpr):
-                flash("CPR-nummeret er ikke i korrekt format (DDMMYY-XXXX).", "danger")
-                return render_template("vis_vitale_tegn.html", cpr=cpr, records=None, submitted=True)
-            
-            # Fetch records for the given CPR number, ordered by tidspunkt descending
-            records = VitaleTegn.get_records_by_cpr(cpr)
-            
-            if records:
-                flash(f"Vitale tegn fundet for CPR-nummer: {cpr}", "success")
-            else:
-                flash(f"Ingen vitale tegn fundet for CPR-nummer: {cpr}", "warning")
-            
-            return render_template("vis_vitale_tegn.html", cpr=cpr, records=records, submitted=True)
-        else:
+        if not cpr:
             flash("Indtast venligst patientens CPR-nummer.", "danger")
             return render_template("vis_vitale_tegn.html", cpr=None, records=None, submitted=True)
+
+        # Validate CPR
+        if not re.match(r"^\d{6}-\d{4}$", cpr):
+            flash("CPR-nummeret er ikke i korrekt format (DDMMYY-XXXX).", "danger")
+            return render_template("vis_vitale_tegn.html", cpr=cpr, records=None, submitted=True)
+
+        records = VitaleTegn.get_records_by_cpr(cpr)
+        if records:
+            flash(f"Vitale tegn fundet for CPR-nummer: {cpr}", "success")
+        else:
+            flash(f"Ingen vitale tegn fundet for CPR-nummer: {cpr}", "warning")
+
+        # Decrypt CPR numbers for display
+        decrypted_records = []
+        for record in records:
+            try:
+                decrypted_cpr = decrypt_cpr(record.cpr_nummer)
+            except Exception as e:
+                decrypted_cpr = "Decryption Error"
+            decrypted_records.append({
+                'id': record.id,
+                'cpr_nummer': decrypted_cpr,
+                'puls': record.puls,
+                'temperatur': record.temperatur,
+                'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')
+            })
+
+        return render_template("vis_vitale_tegn.html", cpr=cpr, records=decrypted_records, submitted=True)
     else:
         return render_template("vis_vitale_tegn.html")
 
 @app.route("/request_update", methods=["POST"])
 @login_required
 def request_update():
-    cpr = request.form.get("cpr").strip()
-    if cpr:
-        try:
-            mqtt_client = mqtt.Client()
-            mqtt_client.username_pw_set(Config.MQTT_USERNAME, Config.MQTT_PASSWORD)
-            mqtt_client.connect(Config.MQTT_BROKER_URL, Config.MQTT_BROKER_PORT)
-            mqtt_client.publish(Config.MQTT_TOPIC, cpr)
-            mqtt_client.disconnect()
-            flash(f"Opdatering anmodet for CPR-nummer: {cpr}", "info")
-            return redirect(url_for("vis_vitale_tegn"))
-        except Exception as e:
-            flash(f"Fejl ved opdatering af CPR-nummer: {cpr} {e}", "danger")
-            return redirect(url_for("vis_vitale_tegn"))
-    else:
+    cpr = request.form.get("cpr", "").strip()
+    if not cpr:
         flash("Ingen CPR-nummer angivet for opdatering.", "danger")
         return redirect(url_for("vis_vitale_tegn"))
 
+    # Validate CPR format
+    if not re.match(r"^\d{6}-\d{4}$", cpr):
+        flash("CPR-nummeret er ikke i korrekt format (DDMMYY-XXXX).", "danger")
+        return redirect(url_for("vis_vitale_tegn"))
+
+    try:
+        mqtt_client = mqtt.Client()
+        mqtt_client.username_pw_set(Config.MQTT_USERNAME, Config.MQTT_PASSWORD)
+        mqtt_client.connect(Config.MQTT_BROKER_URL, Config.MQTT_BROKER_PORT)
+        mqtt_client.publish(Config.MQTT_TOPIC, cpr)
+        mqtt_client.disconnect()
+        flash(f"Opdatering anmodet for CPR-nummer: {cpr}", "info")
+    except Exception as e:
+        app.logger.error(f"Error updating CPR number {cpr}: {e}")
+        flash(f"Fejl ved opdatering af CPR-nummer: {cpr} {e}", "danger")
+
+    return redirect(url_for("vis_vitale_tegn"))
+
 @app.route('/insert_data', methods=['GET'])
 def insert_data():
-    # Predefined CPR number
     predefined_cpr = "010101-1111"
 
-    # Insert 10 rows of data into vitale_tegn
-    for i in range(10):
-        # Generate random pulse and temperature values
-        puls = random.randint(60, 100)  # Random pulse between 60 and 100
-        temperatur = round(random.uniform(36.5, 39.0), 1)  # Random temperature between 36.5°C and 39°C
+    try:
+        for i in range(10):
+            puls = random.randint(60, 100)
+            temperatur = round(random.uniform(36.5, 39.0), 1)
+            if i < 2:
+                cpr_nummer = predefined_cpr
+            else:
+                day = random.randint(1, 31)
+                month = random.randint(1, 12)
+                year = random.randint(0, 99)
+                serial = random.randint(1000, 9999)
+                cpr_nummer = f"{day:02d}{month:02d}{year:02d}-{serial}"
 
-        # Use predefined CPR for the first 2 records, others will follow a different pattern
-        if i < 2:
-            cpr_nummer = predefined_cpr
-        else:
-            cpr_nummer = f"{random.randint(1, 31):02d}{random.randint(1, 12):02d}{random.randint(0, 99):02d}-{random.randint(1000, 9999)}"
+            VitaleTegn.insert_data(cpr_nummer, puls, temperatur)
 
-        # Encrypt CPR number
-        encrypted_cpr = encrypt_cpr(cpr_nummer)
+        # Fetch and decrypt all records for verification
+        records = VitaleTegn.query.all()
+        decrypted_records = []
+        for record in records:
+            try:
+                decrypted_cpr = decrypt_cpr(record.cpr_nummer)
+            except Exception as e:
+                decrypted_cpr = "Decryption Error"
+            decrypted_records.append({
+                'id': record.id,
+                'cpr_nummer': decrypted_cpr,
+                'puls': record.puls,
+                'temperatur': record.temperatur,
+                'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')
+            })
 
-        # Create and add a new record
-        record = VitaleTegn(cpr_nummer=encrypted_cpr, puls=puls, temperatur=temperatur)
-        db.session.add(record)
+        return jsonify(decrypted_records)
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error inserting data: {e}")
+        flash(f"Error inserting data: {e}", "danger")
+        return jsonify({'error': str(e)}), 500
 
-    # Commit the changes to the database
-    db.session.commit()
-
-    # Get all records and decrypt CPR for verification
-    records = VitaleTegn.query.all()
-    decrypted_records = []
-
-    for record in records:
-        decrypted_cpr = decrypt_cpr(record.cpr_nummer)
-        decrypted_records.append({
-            'id': record.id,
-            'cpr_nummer': decrypted_cpr,
-            'puls': record.puls,
-            'temperatur': record.temperatur,
-            'tidspunkt': record.tidspunkt
-        })
-
-    # Return the decrypted data as JSON response for verification
-    return jsonify(decrypted_records)
-    
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
