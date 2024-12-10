@@ -31,4 +31,4 @@ class Config:
         f"mssql+pymssql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
 
-    SQLALCHEMY_ECHO = True  # Enable SQLAlchemy echo for debugging (False in production)
+    SQLALCHEMY_ECHO = False  # Enable SQLAlchemy echo for debugging (False in production)
