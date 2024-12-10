@@ -20,7 +20,7 @@ class Config:
     DB_NAME = os.getenv('DB_NAME', 'vitale_tegn')
 
     # AES encryption key (32 bytes for AES-256)
-    SECRET_KEY = os.getenv('SECRET_KEY', 'xGkWaUFsH4OB6Iq/2Zb35Pjju7bkKl2/jpX4RXxEdra5tGrTonzMq01maiF5CFhG')  # Get SECRET_KEY from environment
+    SECRET_KEY = os.getenv('SECRET_KEY', 'ijn9RML8M9EeNx3Y')  # Get SECRET_KEY from environment
 
     # Ensure SECRET_KEY is in bytes (not string)
     if isinstance(SECRET_KEY, str):
