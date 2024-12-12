@@ -27,7 +27,7 @@ MIN_BPM = 40
 MAX_BPM = 180
 INTERVAL_MEMORY = 10
 MIN_INTERVALS = 5
-NO_BEAT_TIMEOUT = 3000  # Increased timeout
+NO_BEAT_TIMEOUT = 3000  # Increased timeout in milliseconds
 THRESHOLD = 500  # Adjust based on sensor calibration
 
 # Debounce Constants for Emergency Button
@@ -39,6 +39,7 @@ ACCEL_THRESHOLD = 2.5
 MIN_BEAT_INTERVAL = 500
 alarm_active = False
 bpm_measurement_running = False  # Flag to prevent overlapping measurements
+fall_alarm_timer = None  # Reference to the fall alarm timer task
 
 # MPU6050 Functions
 def write_mpu6050(reg, value):
@@ -102,20 +103,44 @@ def reset_pulse_sensor():
     pulse_sensor.atten(ADC.ATTN_11DB)
     print("Pulse sensor reinitialized.")
 
+# Fall Alarm Timeout Function with Countdown
+async def fall_alarm_timeout():
+    """
+    Waits for 30 seconds. If the alarm is still active after this period,
+    sends an MQTT message indicating a fall and stops the alarm.
+    Includes a countdown in the console for debugging.
+    """
+    global fall_alarm_timer, alarm_active  # Declare globals
+
+    for remaining in range(30, 0, -1):
+        print(f"Alarm active. {remaining} seconds remaining to reset.")
+        await asyncio.sleep(1)  # Wait for 1 second
+
+    if alarm_active:
+        message = f"FALD:{MQTT_ID}"
+        mqtt_client.publish(TOPIC_PUB, message.encode())
+        print("Fall alarm timeout reached. Sending FALD message and stopping alarm.")
+        # Directly deactivate the alarm without calling reset_alarm()
+        alarm_active = False
+        set_vibration(0)
+        print("Alarm stopped due to timeout.")
+        # Clear the timer reference
+        fall_alarm_timer = None
+
 # BPM Measurement Function
 async def measure_bpm(duration_sec=30):
     print(f"Starting BPM measurement for {duration_sec} seconds...")
-    
+
     # Start vibration for 2 seconds at the beginning of measurement
     asyncio.create_task(vibrate())  # Default duration_sec=2 and intensity=1023
-    
+
     try:
         # Reset beat detection variables
         last_beat_time = 0
         beat_intervals = []
         beat_detected = False
         last_detect_time = 0
-        
+
         start_time = ticks_ms()
         end_time = ticks_add(start_time, duration_sec * 1000)
         remaining_time = duration_sec
@@ -156,7 +181,7 @@ async def measure_bpm(duration_sec=30):
             if new_remaining != remaining_time and new_remaining >= 0:
                 remaining_time = new_remaining
                 print(f"Measurement in progress... {remaining_time} seconds remaining.")
-            
+
             await asyncio.sleep_ms(100)  # Polling interval
 
         # Calculate Average BPM
@@ -174,7 +199,7 @@ async def measure_bpm(duration_sec=30):
             print(f"Measurement complete. Average BPM over {duration_sec} seconds: {avg_bpm}")
         else:
             print("Could not determine BPM. Please try again.")
-        
+
         # Start vibration for 2 seconds at the end of measurement
         asyncio.create_task(vibrate())  # Default duration_sec=2 and intensity=1023
 
@@ -186,7 +211,7 @@ async def measure_bpm(duration_sec=30):
 
 # Tasks
 async def fall_detection_task():
-    global alarm_active
+    global alarm_active, fall_alarm_timer
     while True:
         magnitude = read_accel_magnitude()
         # print(f"Accel Magnitude: {magnitude:.2f}")  # Optional debug
@@ -194,39 +219,41 @@ async def fall_detection_task():
             alarm_active = True
             print("Fall detected!")
             set_vibration(1023)
+            # Start the fall alarm timeout task
+            fall_alarm_timer = asyncio.create_task(fall_alarm_timeout())
         if alarm_active and reset_button.value() == 0:
             await reset_alarm()
         await asyncio.sleep_ms(100)
 
 async def reset_alarm():
-    global alarm_active
-    alarm_active = False
-    set_vibration(0)
-    print("Alarm reset.")
+    global alarm_active, fall_alarm_timer
+    if alarm_active:
+        alarm_active = False
+        set_vibration(0)
+        print("Alarm reset.")
+        # Cancel the fall alarm timer if it's still running
+        if fall_alarm_timer is not None:
+            fall_alarm_timer.cancel()
+            try:
+                await fall_alarm_timer
+            except asyncio.CancelledError:
+                pass
+            fall_alarm_timer = None
 
 async def emergency_button_task():
     """
-    Monitors the emergency (help) button with edge-triggered debouncing to prevent multiple triggers.
+    Monitors the emergency (help) button with debouncing to prevent multiple triggers.
     """
     last_emergency_press_time = 0  # Initialize last press time
-    prev_emergency_state = 1       # Assume button is not pressed initially
-
     while True:
-        current_state = emergency_button.value()
-        current_time = ticks_ms()
-
-        # Detect falling edge: transition from not pressed (1) to pressed (0)
-        if prev_emergency_state == 1 and current_state == 0:
-            # Check if enough time has passed since the last valid press
+        if emergency_button.value() == 0:
+            current_time = ticks_ms()
+            # Check if enough time has passed since the last press
             if ticks_diff(current_time, last_emergency_press_time) > DEBOUNCE_INTERVAL_MS:
                 print("Emergency button pressed! Sending alert.")
                 message = f"HELP:{MQTT_ID}"
                 mqtt_client.publish(TOPIC_PUB, message.encode())
                 last_emergency_press_time = current_time  # Update the last press time
-
-        # Update the previous state
-        prev_emergency_state = current_state
-
         await asyncio.sleep_ms(50)  # Polling interval (can be adjusted)
 
 async def publish_update():
@@ -261,14 +288,19 @@ async def connect_mqtt():
 # Main
 async def main():
     write_mpu6050(0x6B, 0)  # Wake MPU6050
+
+    # Ensure the vibration motor is off at program start
+    set_vibration(0)
+    print("Vibration motor initialized to OFF.")
+
     try:
         await connect_mqtt()
     except Exception as e:
         print(f"Error MQTT : {e}")
-    
+
     asyncio.create_task(fall_detection_task())
     asyncio.create_task(emergency_button_task())
-    
+
     while True:
         try:
             mqtt_client.check_msg()  # Process incoming MQTT messages
