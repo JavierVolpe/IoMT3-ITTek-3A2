@@ -1,8 +1,7 @@
-
 import uasyncio as asyncio
 from machine import Pin, I2C, ADC, PWM, reset
 from umqttsimple import MQTTClient
-from time import ticks_ms, ticks_diff, sleep_ms
+from time import ticks_ms, ticks_diff, ticks_add
 
 # Hardware Configuration
 vibration_motor = PWM(Pin(16))
@@ -20,13 +19,19 @@ MQTT_USER = "user2"
 MQTT_PASS = "U987ser2."
 TOPIC_PUB = b"sundhed/data"
 TOPIC_SUB = b"sundhed/control"
-MQTT_ID = "010101-1111"
-mqtt_client = MQTTClient(MQTT_ID, MQTT_SERVER, user=MQTT_USER, password=MQTT_PASS)
+mqtt_client = MQTTClient("client0001", MQTT_SERVER, user=MQTT_USER, password=MQTT_PASS)
+
+# BPM Measurement Constants
+MIN_BPM = 40
+MAX_BPM = 180
+INTERVAL_MEMORY = 10
+MIN_INTERVALS = 5
+NO_BEAT_TIMEOUT = 3000  # Increased timeout
+THRESHOLD = 500  # Adjust based on sensor calibration
 
 # Globals
 MPU6050_ADDR = 0x68
 ACCEL_THRESHOLD = 2.5
-THRESHOLD = 600
 MIN_BEAT_INTERVAL = 500
 alarm_active = False
 
@@ -52,20 +57,11 @@ def read_accel_magnitude():
         print(f"Error reading accelerometer: {e}")
         return 0
 
-
 # Vibration Control
 def set_vibration(intensity):
     vibration_motor.duty(intensity)
 
-# MQTT Functions
-# def mqtt_callback(topic=TOPIC_SUB, msg):
-#     print(f"MQTT Message: {msg.decode()}")
-#     if msg.decode() == "reset":
-#         asyncio.create_task(reset_alarm())
-#     elif msg.decode() == "send_update":
-#         asyncio.create_task(publish_update())
-#         print("Requested update")
-
+# MQTT Callback
 def mqtt_callback(topic, msg):
     try:
         message = msg.decode()
@@ -81,19 +77,84 @@ def mqtt_callback(topic, msg):
     except Exception as e:
         print(f"Error in MQTT callback: {e}")
 
+# BPM Measurement Function
+async def measure_bpm(duration_sec=30):
+    print(f"Starting BPM measurement for {duration_sec} seconds...")
+    
+    # Reset beat detection variables
+    last_beat_time = 0
+    beat_intervals = []
+    beat_detected = False
+    last_detect_time = 0
+    
+    start_time = ticks_ms()
+    end_time = ticks_add(start_time, duration_sec * 1000)
+    remaining_time = duration_sec
 
+    while ticks_diff(end_time, ticks_ms()) > 0:
+        sensor_value = pulse_sensor.read()
+        # Uncomment the next line for debugging raw sensor values
+        # print(f"Raw sensor value: {sensor_value}")
+        current_time = ticks_ms()
 
-async def publish_update():
-    bpm = await measure_bpm()
-    message = f"{mqtt_client}:{bpm}"
-    mqtt_client.publish(TOPIC_PUB, message.encode())
+        # Beat Detection
+        if sensor_value > THRESHOLD:
+            if not beat_detected and (last_beat_time == 0 or ticks_diff(current_time, last_beat_time) > MIN_BEAT_INTERVAL):
+                beat_detected = True
+                if last_beat_time != 0:
+                    interval = ticks_diff(current_time, last_beat_time)
+                    bpm = 60000 / interval
+                    if MIN_BPM <= bpm <= MAX_BPM:
+                        beat_intervals.append(interval)
+                        if len(beat_intervals) > INTERVAL_MEMORY:
+                            beat_intervals.pop(0)
+                        print(f"Detected beat. Interval: {interval} ms, BPM: {bpm:.1f}")
+                last_beat_time = current_time
+                last_detect_time = current_time
+        else:
+            beat_detected = False
+
+        # Reset beat detection variables if no beat detected within timeout
+        if ticks_diff(current_time, last_detect_time) > NO_BEAT_TIMEOUT:
+            last_beat_time = 0
+            beat_detected = False
+            last_detect_time = current_time
+            print("No beat detected for timeout duration. Resetting beat detection.")
+            # Do not reset beat_intervals here
+
+        # Countdown Display
+        elapsed_time_sec = ticks_diff(current_time, start_time) // 1000
+        new_remaining = duration_sec - elapsed_time_sec
+        if new_remaining != remaining_time and new_remaining >= 0:
+            remaining_time = new_remaining
+            print(f"Measurement in progress... {remaining_time} seconds remaining.")
+        
+        await asyncio.sleep_ms(100)  # Polling interval
+
+    # Calculate Average BPM
+    if len(beat_intervals) >= MIN_INTERVALS:
+        avg_interval = sum(beat_intervals) / len(beat_intervals)
+        avg_bpm = 60000 / avg_interval
+        if MIN_BPM <= avg_bpm <= MAX_BPM:
+            avg_bpm = round(avg_bpm, 1)
+        else:
+            avg_bpm = 0
+    else:
+        avg_bpm = 0
+
+    if avg_bpm > 0:
+        print(f"Measurement complete. Average BPM over {duration_sec} seconds: {avg_bpm}")
+    else:
+        print("Could not determine BPM. Please try again.")
+    
+    return avg_bpm
 
 # Tasks
 async def fall_detection_task():
     global alarm_active
     while True:
         magnitude = read_accel_magnitude()
-        # print(f"Accel Magnitude: {magnitude:.2f}")
+        # print(f"Accel Magnitude: {magnitude:.2f}")  # Optional debug
         if magnitude > ACCEL_THRESHOLD and not alarm_active:
             alarm_active = True
             print("Fall detected!")
@@ -101,40 +162,6 @@ async def fall_detection_task():
         if alarm_active and reset_button.value() == 0:
             await reset_alarm()
         await asyncio.sleep_ms(100)
-
-async def measure_bpm():
-    print("Start measuring BPM")
-    countdown = 30  # Countdown duration in seconds
-    last_beat = 0
-    intervals = []
-    
-    # Display the countdown
-    while countdown > 0:
-        print(f"Countdown: {countdown} seconds")
-        countdown -= 1
-        await asyncio.sleep(1)  # Wait for 1 second before updating the countdown
-        
-    print("Measurement complete, calculating BPM...")
-    
-    # Now, measure the BPM
-    for _ in range(300):
-        sensor_value = pulse_sensor.read()
-        now = ticks_ms()
-        if sensor_value > THRESHOLD and ticks_diff(now, last_beat) > MIN_BEAT_INTERVAL:
-            if last_beat > 0:
-                intervals.append(ticks_diff(now, last_beat))
-            last_beat = now
-        await asyncio.sleep_ms(100)
-    
-    # Calculate BPM if enough intervals were recorded
-    if len(intervals) > 1:
-        bpm = round(60000 / (sum(intervals) / len(intervals)), 1)
-        print(f"BPM: {bpm}")
-        return bpm
-    
-    print("Not enough data to calculate BPM.")
-    return 0
-
 
 async def reset_alarm():
     global alarm_active
@@ -146,14 +173,22 @@ async def emergency_button_task():
     while True:
         if emergency_button.value() == 0:
             print("Emergency button pressed! Sending alert.")
-            mqtt_client.publish(TOPIC_PUB, "Emergency Alert!")
+            mqtt_client.publish(TOPIC_PUB, f"{MQTT_ID:Emergency")
         await asyncio.sleep_ms(100)
+
+async def publish_update():
+    bpm = await measure_bpm()
+    if bpm > 0:
+        mqtt_client.publish(TOPIC_PUB, f"BPM: {bpm}".encode())
+    else:
+        mqtt_client.publish(TOPIC_PUB, "BPM: N/A".encode())
+    print("BPM data published via MQTT.")
 
 async def connect_mqtt():
     mqtt_client.set_callback(mqtt_callback)
     mqtt_client.connect()
     mqtt_client.subscribe(TOPIC_SUB)
-    print(f"Connected to MQTT broker {TOPIC_SUB}")
+    print(f"Connected to MQTT broker. Subscribed to {TOPIC_SUB.decode()}")
 
 # Main
 async def main():
@@ -166,17 +201,18 @@ async def main():
     asyncio.create_task(fall_detection_task())
     asyncio.create_task(emergency_button_task())
     
-    # Main loop to process incoming MQTT messages
     while True:
-        mqtt_client.check_msg()  # Ensure this is called to process messages
-        await asyncio.sleep(1)
+        try:
+            mqtt_client.check_msg()  # Process incoming MQTT messages
+        except Exception as e:
+            print(f"Error checking MQTT messages: {e}")
+            # Optionally, attempt to reconnect or handle the error
+        await asyncio.sleep(0.1)  # Small sleep to prevent tight looping
 
-
+# Run the main coroutine
 try:
     asyncio.run(main())
 except Exception as e:
     print(f"Error: {e}")
-    #reset()
-
-
+    # Optionally, reset or handle the error
 
