@@ -1,105 +1,63 @@
+from time import sleep
 import paho.mqtt.client as mqtt
-import logging
-import warnings
-import time
+import paho.mqtt.publish as publish
 
-# Configure logging to write to a file with timestamps
-logging.basicConfig(filename='log_forward.log', level=logging.INFO,
-                    format='%(asctime)s %(levelname)s:%(message)s')
+mqtt_remote_broker  = "20.0.194.60"  
+mqtt_remote_topic   = "sundhed/data" 
+mqtt_remote_user    = "Plejehjem1"
+mqtt_remote_pass    = "P987lejehjem1."
+mqtt_local_broker   = "192.168.137.49"
+mqtt_local_user     = "user1"
+mqtt_local_pass     = "R987pi."
+mqtt_local_topic    = "sundhed/data"
 
-# Local MQTT broker configuration (no authentication)
-LOCAL_MQTT_HOST = "localhost"
-LOCAL_MQTT_PORT = 1883
-LOCAL_MQTT_TOPIC = "miot/data"
-LOCAL_MQTT_USERNAME = "securemiot" 
-LOCAL_MQTT_PASSWORD = "securemiot"
+# This function is triggered when a message is received from the local broker
+def send_data(client, userdata, message):
+    msg_str = message.payload.decode("utf-8")
 
-# Remote MQTT broker configuration (with authentication)
+    print(f"Received message from local broker: {msg_str}")
+    
+    if msg_str.startswith("help_"):
+        print("Help message received, sending to remote broker AND MAIL")
 
-REMOTE_MQTT_HOST = "<azure ip>"
-REMOTE_MQTT_PORT = 1883
-REMOTE_MQTT_TOPIC = "azure_miot/data"
-REMOTE_MQTT_USERNAME = "securemiot"
-REMOTE_MQTT_PASSWORD = "megetmegetsikker"
 
-# Initialize clients for local and remote brokers with unique client IDs
-local_client = mqtt.Client(client_id="local_client")
-remote_client = mqtt.Client(client_id="remote_client")
-
-# Set username and password for brokers
-remote_client.username_pw_set(REMOTE_MQTT_USERNAME, REMOTE_MQTT_PASSWORD)
-local_client.username_pw_set(LOCAL_MQTT_USERNAME, LOCAL_MQTT_PASSWORD)
-
-# Define on_connect callback for the local MQTT broker
-def on_connect_local(client, userdata, flags, rc):
-    if rc == 0:
-        logging.info("Connected to local MQTT broker.")
-        client.subscribe(LOCAL_MQTT_TOPIC)
-        logging.info(f"Subscribed to topic '{LOCAL_MQTT_TOPIC}'")
-    else:
-        logging.error(f"Failed to connect to local MQTT broker, return code {rc}")
-
-# Define on_message callback for forwarding messages
-def on_message(client, userdata, msg):
-    payload = msg.payload
-    topic = msg.topic
-    # Publish message to the remote broker
-    result = remote_client.publish(REMOTE_MQTT_TOPIC, payload)
-    status = result.rc  # Using .rc as per updated API
-    if status == mqtt.MQTT_ERR_SUCCESS:
-        logging.info(f"Message forwarded to remote MQTT broker on topic '{REMOTE_MQTT_TOPIC}': {payload.decode()}")
-    else:
-        logging.error(f"Failed to forward message to remote MQTT broker, error code {status}")
-
-# Define on_connect callback for the remote MQTT broker
-def on_connect_remote(client, userdata, flags, rc):
-    if rc == 0:
-        logging.info("Connected to remote MQTT broker.")
-    else:
-        logging.error(f"Failed to connect to remote MQTT broker, return code {rc}")
-
-# Assign callback functions using updated syntax
-local_client.on_connect = on_connect_local
-local_client.on_message = on_message
-remote_client.on_connect = on_connect_remote
-
-def main():
-    # Connect to the remote broker
-    logging.info("Connecting to remote MQTT broker...")
     try:
-        remote_client.connect(REMOTE_MQTT_HOST, REMOTE_MQTT_PORT, 60)
+        # Send the received data to the remote broker
+        publish.single(mqtt_remote_topic, str(msg_str), hostname=mqtt_remote_broker, auth={'username': mqtt_remote_user, 'password': mqtt_remote_pass})
+        print(f"Data sent to the remote broker at {mqtt_remote_broker} with topic {mqtt_remote_topic}")
     except Exception as e:
-        logging.error(f"Could not connect to remote MQTT broker: {e}")
-        return
+        print("Error:", e)
+        print("Failed to connect to the remote broker")
 
-    # Start the remote client loop in a non-blocking way
-    remote_client.loop_start()
+    sleep(0.5)
 
-    # Connect to the local broker
-    logging.info("Connecting to local MQTT broker...")
+def start_logging():
+    """
+    This function starts the logging process.
+    """
     try:
-        local_client.connect(LOCAL_MQTT_HOST, LOCAL_MQTT_PORT, 60)
-    except Exception as e:
-        logging.error(f"Could not connect to local MQTT broker: {e}")
-        remote_client.loop_stop()
-        return
+        # Create MQTT client for local broker
+        client = mqtt.Client()
+        client.username_pw_set(mqtt_local_user, mqtt_local_pass)
+        client.on_message = send_data
 
-    # Start the local client loop in a non-blocking way
-    local_client.loop_start()
+        # Connect to local broker
+        client.connect(mqtt_local_broker, 1883, 60)
+        
+        # Subscribe to the topic on the local broker
+        client.subscribe(mqtt_local_topic, qos=1)
 
-    # Keep the main process alive to let MQTT loops run in the background
-    try:
+        # Start listening for messages (non-blocking)
+        client.loop_start()
+
+        print("Listening for messages on local broker...")
         while True:
-            time.sleep(1)  # Keep the loop alive with a short sleep interval
-    except KeyboardInterrupt:
-        logging.info("Terminating script.")
-    finally:
-        local_client.loop_stop()
-        remote_client.loop_stop()
-        logging.info("MQTT clients stopped.")
+            sleep(1)  # Keeps the program running while listening
 
-if __name__ == "__main__":
-    # Suppress deprecation warnings if they persist
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
-        main()
+    except Exception as e:
+        print("Error in subscribe:", e)
+    except KeyboardInterrupt:
+        print("Program stopped by the user")
+
+start_logging()
+ 
