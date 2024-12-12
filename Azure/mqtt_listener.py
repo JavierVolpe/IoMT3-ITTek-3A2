@@ -1,7 +1,7 @@
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime
-
+#test
 # SMTP Configuration
 SMTP_SERVER = "172.166.233.123"
 SMTP_PORT = 587  # Use 587 for TLS
