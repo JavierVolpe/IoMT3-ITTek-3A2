@@ -24,7 +24,11 @@ login_manager.login_view = "login"  # Ensure a defined login view
 # Context Processor to inject dark_mode into all templates
 @app.context_processor
 def inject_dark_mode():
-    return {'dark_mode': session.get('dark_mode', False)}
+    # If user is authenticated, use their preference. Otherwise, fall back to session.
+    if current_user.is_authenticated:
+        return {'dark_mode': current_user.dark_mode}
+    else:
+        return {'dark_mode': session.get('dark_mode', False)}
 
 # Helper function to derive a key of appropriate length
 def get_aes_key():
@@ -36,22 +40,21 @@ def get_aes_key():
         raise ValueError("SECRET_KEY must be 16, 24, or 32 bytes long for AES encryption.")
     return key
 
-# Encryption Functions
-def encrypt_cpr(cpr_number):
+# Generic Encryption/Decryption Functions
+def encrypt_data(plaintext):
     key = get_aes_key()
     cipher = AES.new(key, AES.MODE_EAX)
-    ciphertext, tag = cipher.encrypt_and_digest(cpr_number.encode('utf-8'))
+    ciphertext, tag = cipher.encrypt_and_digest(plaintext.encode('utf-8'))
     return base64.b64encode(cipher.nonce + tag + ciphertext).decode('utf-8')
 
-def decrypt_cpr(encrypted_cpr):
+def decrypt_data(encrypted_text):
     key = get_aes_key()
     try:
-        data = base64.b64decode(encrypted_cpr.encode('utf-8'))
+        data = base64.b64decode(encrypted_text.encode('utf-8'))
         nonce, tag, ciphertext = data[:16], data[16:32], data[32:]
         cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
         return cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8')
     except (ValueError, KeyError) as e:
-        # Handle incorrect decryption
         app.logger.error(f"Decryption failed: {e}")
         return "Decryption Error"
 
@@ -60,6 +63,7 @@ class Users(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(250), unique=True, nullable=False)
     password = db.Column(db.String(250), nullable=False)
+    dark_mode = db.Column(db.Boolean, default=False)  # User preference for dark mode
 
 class VitaleTegn(db.Model):
     __tablename__ = 'vitale_tegn'
@@ -68,11 +72,10 @@ class VitaleTegn(db.Model):
     cpr_nummer = db.Column(db.String(256), nullable=False)  # Encrypted CPR
     cpr_hash = db.Column(db.String(64), nullable=False, index=True)  # Hashed CPR for search
     tidspunkt = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
-    puls = db.Column(db.Integer, nullable=False)
-    temperatur = db.Column(db.Float, nullable=False)
+    puls = db.Column(db.String(256), nullable=False)  # Encrypted puls
 
     def __repr__(self):
-        return f"<VitaleTegn {self.cpr_nummer} - {self.puls} bpm - {self.temperatur}°C>"
+        return f"<VitaleTegn {self.cpr_nummer}>"
 
     @staticmethod
     def hash_cpr(cpr):
@@ -80,22 +83,23 @@ class VitaleTegn(db.Model):
         return hashlib.sha256(cpr.encode('utf-8')).hexdigest()
 
     @staticmethod
-    def insert_data(cpr, puls, temperatur):
-        encrypted_cpr = encrypt_cpr(cpr)
+    def insert_data(cpr, puls):
+        # Encrypt data fields
+        encrypted_cpr = encrypt_data(cpr)
+        encrypted_puls = encrypt_data(str(puls))
         cpr_hash = VitaleTegn.hash_cpr(cpr)
         new_record = VitaleTegn(
             cpr_nummer=encrypted_cpr,
             cpr_hash=cpr_hash,
-            puls=puls,
-            temperatur=temperatur
+            puls=encrypted_puls
         )
         db.session.add(new_record)
         db.session.commit()
 
     @staticmethod
-    def get_records_by_cpr(cpr):
+    def get_records_by_cpr_query(cpr):
         cpr_hash = VitaleTegn.hash_cpr(cpr)
-        return VitaleTegn.query.filter_by(cpr_hash=cpr_hash).order_by(VitaleTegn.tidspunkt.desc()).all()
+        return VitaleTegn.query.filter_by(cpr_hash=cpr_hash)
 
 # Create all tables
 with app.app_context():
@@ -105,10 +109,9 @@ with app.app_context():
 def load_user(user_id):
     return Users.query.get(int(user_id))
 
-# Route to toggle dark mode
+# Route to toggle dark mode (session-based, deprecated by user preference but still can be used)
 @app.route('/toggle_dark_mode', methods=['POST'])
 def toggle_dark_mode():
-    # Toggle the dark_mode session variable
     current_theme = session.get('dark_mode', False)
     session['dark_mode'] = not current_theme
     return redirect(request.referrer or url_for('home'))
@@ -140,9 +143,11 @@ def login():
     if request.method == "POST":
         username = request.form.get("username").strip()
         password = request.form.get("password").strip()
+        remember = request.form.get("remember") == 'on'  # Remember me functionality
+
         user = Users.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
-            login_user(user)
+            login_user(user, remember=remember)
             flash("Login successful.", "success")
             return redirect(url_for("home"))
         else:
@@ -165,47 +170,65 @@ def home():
 def vis_vitale_tegn():
     if request.method == "POST":
         cpr = request.form.get("cpr", "").strip()
-        
-        if not cpr:
-            flash("Indtast venligst patientens CPR-nummer.", "danger")
-            return render_template("vis_vitale_tegn.html", cpr=None, records=None, submitted=True)
+        date_from = request.form.get("date_from", "").strip()
+        date_to = request.form.get("date_to", "").strip()
+        page = 1
+    else:
+        # For pagination links
+        cpr = request.args.get("cpr", "").strip() if request.args.get("cpr") else ""
+        date_from = request.args.get("date_from", "").strip() if request.args.get("date_from") else ""
+        date_to = request.args.get("date_to", "").strip() if request.args.get("date_to") else ""
+        page = request.args.get('page', 1, type=int)
 
-        # Validate CPR
+    submitted = (request.method == "POST")
+    records = []
+    pagination = None
+
+    if cpr:
         if not re.match(r"^\d{6}-\d{4}$", cpr):
             flash("CPR-nummeret er ikke i korrekt format (DDMMYY-XXXX).", "danger")
-            return render_template("vis_vitale_tegn.html", cpr=cpr, records=None, submitted=True)
-
-        records = VitaleTegn.get_records_by_cpr(cpr)
-        if records:
-            flash(f"Vitale tegn fundet for CPR-nummer: {cpr}", "success")
         else:
-            flash(f"Ingen vitale tegn fundet for CPR-nummer: {cpr}", "warning")
+            query = VitaleTegn.get_records_by_cpr_query(cpr)
 
-        # Decrypt CPR numbers for display
-        decrypted_records = []
-        for record in records:
-            try:
-                decrypted_cpr = decrypt_cpr(record.cpr_nummer)
-            except Exception as e:
-                decrypted_cpr = "Decryption Error"
-            decrypted_records.append({
-                'id': record.id,
-                'cpr_nummer': decrypted_cpr,
-                'puls': record.puls,
-                'temperatur': record.temperatur,
-                'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')  # Formatted string
-            })
+            # Apply date filters if valid
+            if date_from:
+                try:
+                    dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+                    query = query.filter(VitaleTegn.tidspunkt >= dt_from)
+                except ValueError:
+                    flash("Ugyldig startdato format. Brug YYYY-MM-DD.", "danger")
 
-        return render_template("vis_vitale_tegn.html", cpr=cpr, records=decrypted_records, submitted=True)
+            if date_to:
+                try:
+                    dt_to = datetime.strptime(date_to, "%Y-%m-%d")
+                    query = query.filter(VitaleTegn.tidspunkt <= dt_to)
+                except ValueError:
+                    flash("Ugyldig slutdato format. Brug YYYY-MM-DD.", "danger")
+
+            pagination = query.order_by(VitaleTegn.tidspunkt.desc()).paginate(page=page, per_page=10)
+            records = pagination.items
+
+            if records:
+                flash(f"Vitale tegn fundet for CPR-nummer: {cpr}", "success")
+            else:
+                flash(f"Ingen vitale tegn fundet for CPR-nummer: {cpr}", "warning")
     else:
-        return render_template("vis_vitale_tegn.html")
+        if submitted:
+            flash("Indtast venligst patientens CPR-nummer.", "danger")
 
+    # Decrypt records
+    decrypted_records = []
+    for record in records:
+        decrypted_cpr = decrypt_data(record.cpr_nummer)
+        decrypted_puls = decrypt_data(record.puls)
+        decrypted_records.append({
+            'id': record.id,
+            'cpr_nummer': decrypted_cpr,
+            'puls': decrypted_puls,
+            'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')
+        })
 
-@app.route("/fald_detektion")
-@login_required
-def fald_detektion():
-    return render_template("fald.html")
-
+    return render_template("vis_vitale_tegn.html", cpr=cpr, records=decrypted_records, submitted=submitted, pagination=pagination, date_from=date_from, date_to=date_to)
 
 @app.route("/request_update", methods=["POST"])
 @login_required
@@ -231,7 +254,7 @@ def request_update():
         app.logger.error(f"Error updating CPR number {cpr}: {e}")
         flash(f"Fejl ved opdatering af CPR-nummer: {cpr} {e}", "danger")
 
-    return redirect(url_for("vis_vitale_tegn"))
+    return redirect(url_for("vis_vitale_tegn", cpr=cpr))
 
 @app.route('/insert_data', methods=['GET'])
 def insert_data():
@@ -240,31 +263,27 @@ def insert_data():
     try:
         for i in range(10):
             puls = random.randint(60, 100)
-            temperatur = round(random.uniform(36.5, 39.0), 1)
             if i < 2:
                 cpr_nummer = predefined_cpr
             else:
-                day = random.randint(1, 31)
+                day = random.randint(1, 28)
                 month = random.randint(1, 12)
                 year = random.randint(0, 99)
                 serial = random.randint(1000, 9999)
                 cpr_nummer = f"{day:02d}{month:02d}{year:02d}-{serial}"
 
-            VitaleTegn.insert_data(cpr_nummer, puls, temperatur)
+            VitaleTegn.insert_data(cpr_nummer, puls)
 
         # Fetch and decrypt all records for verification
         records = VitaleTegn.query.all()
         decrypted_records = []
         for record in records:
-            try:
-                decrypted_cpr = decrypt_cpr(record.cpr_nummer)
-            except Exception as e:
-                decrypted_cpr = "Decryption Error"
+            decrypted_cpr = decrypt_data(record.cpr_nummer)
+            decrypted_puls = decrypt_data(record.puls)
             decrypted_records.append({
                 'id': record.id,
                 'cpr_nummer': decrypted_cpr,
-                'puls': record.puls,
-                'temperatur': record.temperatur,
+                'puls': decrypted_puls,
                 'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')
             })
 
@@ -274,6 +293,25 @@ def insert_data():
         app.logger.error(f"Error inserting data: {e}")
         flash(f"Error inserting data: {e}", "danger")
         return jsonify({'error': str(e)}), 500
+
+@app.route("/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    if request.method == "POST":
+        # Changing password
+        new_password = request.form.get("new_password", "").strip()
+        if new_password:
+            current_user.password = generate_password_hash(new_password, method="pbkdf2:sha1")
+            flash("Adgangskode opdateret.", "success")
+        
+        # Update dark mode preference
+        new_theme_pref = request.form.get("dark_mode") == 'on'
+        current_user.dark_mode = new_theme_pref
+        db.session.commit()
+        session['dark_mode'] = new_theme_pref  # Update session immediately
+        return redirect(url_for("profile"))
+    
+    return render_template("profile.html", user=current_user)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
