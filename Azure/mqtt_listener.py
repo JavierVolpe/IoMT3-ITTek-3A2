@@ -20,8 +20,11 @@ Best regards,
 Your Monitoring System
 """
 
-def send_email(cpr="010101-1111"):
-    EMAIL_SUBJECT = f"Critical MQTT Alert {cpr}"
+def send_email(type,cpr="010101-1111"):
+    if type == "FALD":
+        EMAIL_SUBJECT = f"{cpr} Has fallen into the river in lego city"
+    elif type == "HELP":
+        EMAIL_SUBJECT = f"{cpr} Help is needed in lego city"
     msg = MIMEText(EMAIL_BODY)
     msg['Subject'] = EMAIL_SUBJECT
     msg['From'] = EMAIL_FROM
@@ -39,5 +42,5 @@ def send_email(cpr="010101-1111"):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-if __name__ == "__main__":
-    send_email("010101-1111")
+#if __name__ == "__main__":
+#    send_email("010101-1111")

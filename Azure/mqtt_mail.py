@@ -19,8 +19,17 @@ def send_data(client, userdata, message):
             print(f"Extracted numbers: {numbers}")
             
             # Pass the numbers to send_email()
-            send_email(numbers)
+            send_email("HELP",numbers)
             print("Help message received, sending mail with numbers")
+
+        if msg_str.startswith("FALD:"):
+            # Extract the numbers after "HELP:"
+            numbers = msg_str.split("FALD:")[1].strip()
+            print(f"Extracted numbers: {numbers}")
+            
+            # Pass the numbers to send_email()
+            send_email("FALD",numbers)
+            print("Fald message received, sending mail with numbers")
     
     except Exception as e:
         print(f"Error processing message: {e}")
