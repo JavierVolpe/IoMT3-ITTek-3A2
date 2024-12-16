@@ -1,5 +1,6 @@
 import smtplib
 from email.mime.text import MIMEText
+from datetime import datetime
 
 # SMTP Configuration
 SMTP_SERVER = "172.166.233.123"
@@ -29,6 +30,7 @@ def send_email(type,cpr="010101-1111"):
     msg['Subject'] = EMAIL_SUBJECT
     msg['From'] = EMAIL_FROM
     msg['To'] = EMAIL_TO
+    msg['Date'] = (str(datetime.now())).split(".")[0]
 
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10) as server:
