@@ -6,9 +6,9 @@ mqtt_remote_broker  = "20.0.194.60"
 mqtt_remote_topic   = "sundhed/data" 
 mqtt_remote_user    = "Plejehjem1"
 mqtt_remote_pass    = "P987lejehjem1."
-mqtt_local_broker   = "192.168.137.49"
-mqtt_local_user     = "user1"
-mqtt_local_pass     = "U987ser1."
+mqtt_local_broker   = "192.168.1.106"
+mqtt_local_user     = "user2"
+mqtt_local_pass     = "U987ser2."
 mqtt_local_topic    = "sundhed/data"
 
 # This function is triggered when a message is received from the local broker
