@@ -4,10 +4,10 @@ from umqttsimple import MQTTClient
 from time import ticks_ms, ticks_diff, ticks_add
 
 # Hardware Configuration
-vibration_motor = PWM(Pin(16))
+vibration_motor = PWM(Pin(27))
 vibration_motor.freq(1000)
-reset_button = Pin(17, Pin.IN, Pin.PULL_UP)
-emergency_button = Pin(18, Pin.IN, Pin.PULL_UP)
+reset_button = Pin(15, Pin.IN, Pin.PULL_UP)
+emergency_button = Pin(16, Pin.IN, Pin.PULL_UP)
 pulse_sensor = ADC(Pin(34))
 pulse_sensor.width(ADC.WIDTH_12BIT)
 pulse_sensor.atten(ADC.ATTN_11DB)
@@ -265,9 +265,9 @@ async def publish_update():
     try:
         bpm = await measure_bpm()
         if bpm > 0:
-            mqtt_client.publish(TOPIC_PUB, f"BPM: {bpm}".encode())
+            mqtt_client.publish(TOPIC_PUB, f"{MQTT_ID}:{bpm}".encode())
         else:
-            mqtt_client.publish(TOPIC_PUB, "BPM: N/A".encode())
+            mqtt_client.publish(TOPIC_PUB, f"{MQTT_ID}:Error".encode())
     finally:
         bpm_measurement_running = False
     print("BPM data published via MQTT.")
@@ -315,4 +315,5 @@ try:
 except Exception as e:
     print(f"Error: {e}")
     # Optionally, reset or handle the error
+
 
