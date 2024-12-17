@@ -5,22 +5,12 @@ from time import ticks_ms, ticks_diff, ticks_add
 
 # Pin Definitions
 ADC_PIN = 32
-
-# Hardware Configuration
-vibration_motor = PWM(Pin(27))
-vibration_motor.freq(1000)
-reset_button = Pin(2, Pin.IN, Pin.PULL_UP)
-<<<<<<< HEAD
-emergency_button = Pin(16, Pin.IN, Pin.PULL_UP)
-=======
-emergency_button = Pin(15, Pin.IN, Pin.PULL_UP)
->>>>>>> 94f89cb1c1a78ed65f724b003d79aea0a0939d1c
-pulse_sensor = ADC(Pin(34))
-pulse_sensor.width(ADC.WIDTH_12BIT)
-pulse_sensor.atten(ADC.ATTN_11DB)
-i2c = I2C(0, scl=Pin(22), sda=Pin(21), freq=400000)
-bat_adc = ADC(Pin(ADC_PIN))
-bat_adc.atten(ADC.ATTN_11DB)
+VIBRATION_MOTOR_PIN = 27
+RESET_BUTTON_PIN = 2
+EMERGENCY_BUTTON_PIN = 15
+PULSE_SENSOR_PIN = 34
+I2C_SCL_PIN = 22
+I2C_SDA_PIN = 21
 
 # MQTT Configuration
 MQTT_SERVER = "192.168.137.91"
@@ -29,7 +19,6 @@ MQTT_PASS = "U987ser2."
 TOPIC_PUB = b"sundhed/data"
 TOPIC_SUB = b"sundhed/control"
 MQTT_ID = "010101-1111"
-mqtt_client = MQTTClient(MQTT_ID, MQTT_SERVER, user=MQTT_USER, password=MQTT_PASS)
 
 # BPM Measurement Constants
 MIN_BPM = 40
@@ -59,6 +48,24 @@ BATTERY_MIN_VOLT = 3.7
 BATTERY_MAX_VOLT = 4.2
 scale_factor = 0.781
 offset = 0.388
+
+# Hardware Configuration
+vibration_motor = PWM(Pin(VIBRATION_MOTOR_PIN))
+vibration_motor.freq(1000)
+
+reset_button = Pin(RESET_BUTTON_PIN, Pin.IN, Pin.PULL_UP)
+emergency_button = Pin(EMERGENCY_BUTTON_PIN, Pin.IN, Pin.PULL_UP)
+
+pulse_sensor = ADC(Pin(PULSE_SENSOR_PIN))
+pulse_sensor.width(ADC.WIDTH_12BIT)
+pulse_sensor.atten(ADC.ATTN_11DB)
+
+i2c = I2C(0, scl=Pin(I2C_SCL_PIN), sda=Pin(I2C_SDA_PIN), freq=400000)
+
+bat_adc = ADC(Pin(ADC_PIN))
+bat_adc.atten(ADC.ATTN_11DB)
+
+mqtt_client = MQTTClient(MQTT_ID, MQTT_SERVER, user=MQTT_USER, password=MQTT_PASS)
 
 # MPU6050 Functions
 def write_mpu6050(reg, value):
@@ -367,8 +374,4 @@ try:
     asyncio.run(main())
 except Exception as e:
     print(f"Error: {e}")
-    # Optionally, reset or handle the error
-
-
-
-
+    #reset()
