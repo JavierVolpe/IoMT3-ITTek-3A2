@@ -5,12 +5,27 @@ from time import ticks_ms, ticks_diff, ticks_add
 
 # Pin Definitions
 ADC_PIN = 32
+<<<<<<< HEAD
 VIBRATION_MOTOR_PIN = 27
 RESET_BUTTON_PIN = 2
 EMERGENCY_BUTTON_PIN = 15
 PULSE_SENSOR_PIN = 34
 I2C_SCL_PIN = 22
 I2C_SDA_PIN = 21
+=======
+
+# Hardware Configuration
+vibration_motor = PWM(Pin(27))
+vibration_motor.freq(1000)
+reset_button = Pin(2, Pin.IN, Pin.PULL_UP)
+emergency_button = Pin(16, Pin.IN, Pin.PULL_UP)
+pulse_sensor = ADC(Pin(34))
+pulse_sensor.width(ADC.WIDTH_12BIT)
+pulse_sensor.atten(ADC.ATTN_11DB)
+i2c = I2C(0, scl=Pin(22), sda=Pin(21), freq=400000)
+bat_adc = ADC(Pin(ADC_PIN))
+bat_adc.atten(ADC.ATTN_11DB)
+>>>>>>> d9ad6a09e47cf8f43e6915c312960e4ca66a7e14
 
 # MQTT Configuration
 MQTT_SERVER = "192.168.137.91"
@@ -374,4 +389,8 @@ try:
     asyncio.run(main())
 except Exception as e:
     print(f"Error: {e}")
+<<<<<<< HEAD
     #reset()
+=======
+    # Optionally, reset or handle the error
+>>>>>>> d9ad6a09e47cf8f43e6915c312960e4ca66a7e14
