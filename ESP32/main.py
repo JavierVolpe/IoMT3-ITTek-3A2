@@ -3,18 +3,23 @@ from machine import Pin, I2C, ADC, PWM, reset
 from umqttsimple import MQTTClient
 from time import ticks_ms, ticks_diff, ticks_add
 
+# Pin Definitions
+ADC_PIN = 32
+
 # Hardware Configuration
 vibration_motor = PWM(Pin(27))
 vibration_motor.freq(1000)
-reset_button = Pin(15, Pin.IN, Pin.PULL_UP)
+reset_button = Pin(2, Pin.IN, Pin.PULL_UP)
 emergency_button = Pin(16, Pin.IN, Pin.PULL_UP)
 pulse_sensor = ADC(Pin(34))
 pulse_sensor.width(ADC.WIDTH_12BIT)
 pulse_sensor.atten(ADC.ATTN_11DB)
 i2c = I2C(0, scl=Pin(22), sda=Pin(21), freq=400000)
+bat_adc = ADC(Pin(ADC_PIN))
+bat_adc.atten(ADC.ATTN_11DB)
 
 # MQTT Configuration
-MQTT_SERVER = "192.168.1.106"
+MQTT_SERVER = "192.168.137.91"
 MQTT_USER = "user2"
 MQTT_PASS = "U987ser2."
 TOPIC_PUB = b"sundhed/data"
@@ -40,6 +45,16 @@ MIN_BEAT_INTERVAL = 500
 alarm_active = False
 bpm_measurement_running = False  # Flag to prevent overlapping measurements
 fall_alarm_timer = None  # Reference to the fall alarm timer task
+
+# Battery Voltage Calculation
+R1 = 6200.0   # 6.2kΩ
+R2 = 5600.0   # 5.6kΩ
+ADC_MAX = 4095.0
+ADC_VREF = 3.6  
+BATTERY_MIN_VOLT = 3.7
+BATTERY_MAX_VOLT = 4.2
+scale_factor = 0.781
+offset = 0.388
 
 # MPU6050 Functions
 def write_mpu6050(reg, value):
@@ -84,16 +99,29 @@ def mqtt_callback(topic, msg):
     try:
         message = msg.decode()
         print("Received message:", message, "on topic:", topic.decode())
-        if message == "send_update":
-            print("Requested update. Sending.")
-            asyncio.create_task(publish_update())
-        elif message == "reset":
-            print("Reset command received.")
-            asyncio.create_task(reset_alarm())
+        
+        # Check if message has a colon, indicating device ID
+        if ":" in message:
+            if message.split(":")[1] == str(MQTT_ID):
+                print("Message is for this device. Processing.")
+                
+                if message.split(":")[0] == "send_update":
+                    print("Requested update. Sending.")
+                    calculate_battery_percentage()
+                    asyncio.create_task(publish_update())
+                elif message.split(":")[0] == "reset":
+                    print("Reset command received.")
+                    asyncio.create_task(reset_alarm())
+                else:
+                    print(f"Unknown command for this device: {message}")
+            else:
+                print(f"Message is not for this device. Ignoring. {message}")
         else:
-            print(f"Unknown command: {message}")
+            print(f"Message does not contain device ID. Ignoring. {message}")
+
     except Exception as e:
         print(f"Error in MQTT callback: {e}")
+
 
 # Pulse Sensor Reset Function
 def reset_pulse_sensor():
@@ -102,6 +130,25 @@ def reset_pulse_sensor():
     pulse_sensor.width(ADC.WIDTH_12BIT)
     pulse_sensor.atten(ADC.ATTN_11DB)
     print("Pulse sensor reinitialized.")
+
+# Battery Voltage Reading Function
+def read_battery_voltage():
+    adc_value = bat_adc.read()
+    voltage_at_adc = adc_value * (ADC_VREF / ADC_MAX)
+    battery_voltage_raw = voltage_at_adc * (R1 + R2) / R2
+    battery_voltage = (battery_voltage_raw * scale_factor) + offset
+    return battery_voltage
+
+def calculate_battery_percentage():
+    voltage = read_battery_voltage()
+    if voltage <= BATTERY_MIN_VOLT:
+        return 0
+    if voltage >= BATTERY_MAX_VOLT:
+        return 100
+    battery_message = (voltage - BATTERY_MIN_VOLT) / (BATTERY_MAX_VOLT - BATTERY_MIN_VOLT) * 100
+    message = f"BAT:{MQTT_ID}:{battery_message:.1f}"
+    mqtt_client.publish(TOPIC_PUB, message.encode())
+    print(f"Battery percentage published via MQTT. Voltage: {voltage:.2f}V, Percentage: {battery_message:.1f}%")
 
 # Fall Alarm Timeout Function with Countdown
 async def fall_alarm_timeout():
@@ -128,11 +175,11 @@ async def fall_alarm_timeout():
         fall_alarm_timer = None
 
 # BPM Measurement Function
-async def measure_bpm(duration_sec=30):
+async def measure_bpm(duration_sec=30, vibration_duration_sec=2):
     print(f"Starting BPM measurement for {duration_sec} seconds...")
 
-    # Start vibration for 2 seconds at the beginning of measurement
-    asyncio.create_task(vibrate())  # Default duration_sec=2 and intensity=1023
+    # Start vibration for vibration_duration_sec seconds at the beginning of measurement
+    await vibrate(duration_sec=vibration_duration_sec, intensity=1023)  # Run vibration first
 
     try:
         # Reset beat detection variables
@@ -198,16 +245,17 @@ async def measure_bpm(duration_sec=30):
         if avg_bpm > 0:
             print(f"Measurement complete. Average BPM over {duration_sec} seconds: {avg_bpm}")
         else:
-            print("Could not determine BPM. Please try again.")
+            print(f"Could not determine BPM. Please try again. (DEBUG:{avg_bpm})")
 
         # Start vibration for 2 seconds at the end of measurement
-        asyncio.create_task(vibrate())  # Default duration_sec=2 and intensity=1023
+        await vibrate(duration_sec=vibration_duration_sec, intensity=500)  # Default duration_sec=2 and intensity=1023
 
         return avg_bpm
 
     except Exception as e:
         print(f"Error during BPM measurement: {e}")
         return 0
+
 
 # Tasks
 async def fall_detection_task():
@@ -257,6 +305,7 @@ async def emergency_button_task():
         await asyncio.sleep_ms(50)  # Polling interval (can be adjusted)
 
 async def publish_update():
+    
     global bpm_measurement_running
     if bpm_measurement_running:
         print("BPM measurement already running.")
@@ -265,14 +314,14 @@ async def publish_update():
     try:
         bpm = await measure_bpm()
         if bpm > 0:
-            mqtt_client.publish(TOPIC_PUB, f"{MQTT_ID}:{bpm}".encode())
+            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:{bpm}".encode())
         else:
-            mqtt_client.publish(TOPIC_PUB, f"{MQTT_ID}:Error".encode())
+            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:Error".encode())
     finally:
         bpm_measurement_running = False
     print("BPM data published via MQTT.")
     reset_pulse_sensor()  # Reinitialize the pulse sensor
-
+    
 async def connect_mqtt():
     while True:
         try:
@@ -315,5 +364,7 @@ try:
 except Exception as e:
     print(f"Error: {e}")
     # Optionally, reset or handle the error
+
+
 
 
