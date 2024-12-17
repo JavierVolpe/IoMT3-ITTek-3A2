@@ -138,12 +138,17 @@ def register():
             flash(f"Registration failed: {e}", "danger")
     return render_template("sign_up.html")
 
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username").strip()
         password = request.form.get("password").strip()
-        remember = request.form.get("remember") == 'on'  # Remember me functionality
+        remember = request.form.get("remember") == 'on'  # Capture the remember option
 
         user = Users.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
@@ -153,6 +158,7 @@ def login():
         else:
             flash("Invalid username or password.", "danger")
     return render_template("login.html")
+
 
 @app.route("/logout")
 @login_required
@@ -244,10 +250,11 @@ def request_update():
         return redirect(url_for("vis_vitale_tegn"))
 
     try:
+        message = f"send_update:{cpr}"
         mqtt_client = mqtt.Client()
         mqtt_client.username_pw_set(Config.MQTT_USERNAME, Config.MQTT_PASSWORD)
         mqtt_client.connect(Config.MQTT_BROKER_URL, Config.MQTT_BROKER_PORT)
-        mqtt_client.publish(Config.MQTT_TOPIC, cpr)
+        mqtt_client.publish(Config.MQTT_TOPIC, message)
         mqtt_client.disconnect()
         flash(f"Opdatering anmodet for CPR-nummer: {cpr}", "info")
     except Exception as e:

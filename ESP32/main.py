@@ -10,7 +10,11 @@ ADC_PIN = 32
 vibration_motor = PWM(Pin(27))
 vibration_motor.freq(1000)
 reset_button = Pin(2, Pin.IN, Pin.PULL_UP)
+<<<<<<< HEAD
 emergency_button = Pin(16, Pin.IN, Pin.PULL_UP)
+=======
+emergency_button = Pin(15, Pin.IN, Pin.PULL_UP)
+>>>>>>> 94f89cb1c1a78ed65f724b003d79aea0a0939d1c
 pulse_sensor = ADC(Pin(34))
 pulse_sensor.width(ADC.WIDTH_12BIT)
 pulse_sensor.atten(ADC.ATTN_11DB)
