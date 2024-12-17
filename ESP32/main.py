@@ -6,15 +6,15 @@ from time import ticks_ms, ticks_diff, ticks_add
 # Hardware Configuration
 vibration_motor = PWM(Pin(27))
 vibration_motor.freq(1000)
-reset_button = Pin(15, Pin.IN, Pin.PULL_UP)
-emergency_button = Pin(16, Pin.IN, Pin.PULL_UP)
+reset_button = Pin(2, Pin.IN, Pin.PULL_UP)
+emergency_button = Pin(15, Pin.IN, Pin.PULL_UP)
 pulse_sensor = ADC(Pin(34))
 pulse_sensor.width(ADC.WIDTH_12BIT)
 pulse_sensor.atten(ADC.ATTN_11DB)
 i2c = I2C(0, scl=Pin(22), sda=Pin(21), freq=400000)
 
 # MQTT Configuration
-MQTT_SERVER = "192.168.1.106"
+MQTT_SERVER = "192.168.137.91"
 MQTT_USER = "user2"
 MQTT_PASS = "U987ser2."
 TOPIC_PUB = b"sundhed/data"
