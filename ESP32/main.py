@@ -118,7 +118,6 @@ def mqtt_callback(topic, msg):
                 
                 if message.split(":")[0] == "send_update":
                     print("Requested update. Sending.")
-                    calculate_battery_percentage()
                     asyncio.create_task(publish_update())
                 elif message.split(":")[0] == "reset":
                     print("Reset command received.")
@@ -157,7 +156,7 @@ def calculate_battery_percentage():
     if voltage >= BATTERY_MAX_VOLT:
         return 100
     battery_message = (voltage - BATTERY_MIN_VOLT) / (BATTERY_MAX_VOLT - BATTERY_MIN_VOLT) * 100
-    message = f"BAT:{MQTT_ID}:{battery_message:.1f}"
+    message = str(f"BAT:{MQTT_ID}:{battery_message:.1f}")
     mqtt_client.publish(TOPIC_PUB, message.encode())
     print(f"Battery percentage published via MQTT. Voltage: {voltage:.2f}V, Percentage: {battery_message:.1f}%")
 
@@ -325,7 +324,7 @@ async def publish_update():
     try:
         bpm = await measure_bpm()
         if bpm > 0:
-            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:{bpm}".encode())
+            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:{bpm}:{calculate_battery_percentage}".encode())
         else:
             mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:Error".encode())
     finally:
@@ -374,7 +373,8 @@ try:
     asyncio.run(main())
 except Exception as e:
     print(f"Error: {e}")
-    #reset()
+    # Optionally, reset or handle the error
+
 
 
 
