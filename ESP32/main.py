@@ -13,7 +13,7 @@ I2C_SCL_PIN = 22
 I2C_SDA_PIN = 21
 
 # MQTT Configuration
-MQTT_SERVER = "192.168.137.91"
+MQTT_SERVER = "gruppe3a2"
 MQTT_USER = "user2"
 MQTT_PASS = "U987ser2."
 TOPIC_PUB = b"sundhed/data"
@@ -94,7 +94,7 @@ def set_vibration(intensity):
     vibration_motor.duty(intensity)
 
 # Vibration Helper Function
-async def vibrate(duration_sec=2, intensity=1023):
+async def vibrate(duration_sec=2, intensity=800):
     """
     Activates the vibration motor at the specified intensity for the given duration.
 
@@ -189,7 +189,7 @@ async def measure_bpm(duration_sec=30, vibration_duration_sec=2):
     print(f"Starting BPM measurement for {duration_sec} seconds...")
 
     # Start vibration for vibration_duration_sec seconds at the beginning of measurement
-    await vibrate(duration_sec=vibration_duration_sec, intensity=1023)  # Run vibration first
+    await vibrate(duration_sec=vibration_duration_sec, intensity=700)  # Run vibration first
 
     try:
         # Reset beat detection variables
@@ -276,7 +276,7 @@ async def fall_detection_task():
         if magnitude > ACCEL_THRESHOLD and not alarm_active:
             alarm_active = True
             print("Fall detected!")
-            set_vibration(1023)
+            set_vibration(700)
             # Start the fall alarm timeout task
             fall_alarm_timer = asyncio.create_task(fall_alarm_timeout())
         if alarm_active and reset_button.value() == 0:
@@ -324,7 +324,8 @@ async def publish_update():
     try:
         bpm = await measure_bpm()
         if bpm > 0:
-            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:{bpm}:{calculate_battery_percentage}".encode())
+            bat_percent = str(calculate_battery_percentage())
+            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:{bpm}:{bat_percent}".encode())
         else:
             mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:Error".encode())
     finally:
@@ -346,14 +347,15 @@ async def connect_mqtt():
 
 # Main
 async def main():
-    write_mpu6050(0x6B, 0)  # Wake MPU6050
 
+    write_mpu6050(0x6B, 0)  # Wake MPU6050
     # Ensure the vibration motor is off at program start
     set_vibration(0)
     print("Vibration motor initialized to OFF.")
 
     try:
         await connect_mqtt()
+        mqtt_client.publish(TOPIC_PUB, "Start".encode())
     except Exception as e:
         print(f"Error MQTT : {e}")
 
@@ -370,10 +372,14 @@ async def main():
 
 # Run the main coroutine
 try:
+    
     asyncio.run(main())
+
 except Exception as e:
     print(f"Error: {e}")
     # Optionally, reset or handle the error
+
+
 
 
 
