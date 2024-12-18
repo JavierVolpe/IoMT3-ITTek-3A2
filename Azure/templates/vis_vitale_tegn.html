@@ -3,17 +3,7 @@
 
 <h1>Vis Vitale Tegn</h1>
 
-<!-- Display Flash Messages -->
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, message in messages %}
-      <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-        {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-      </div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
+
 
 <!-- CPR Number Form -->
 <form action="{{ url_for('vitale.vis_vitale_tegn') }}" method="POST">
@@ -31,7 +21,6 @@
         <table class="table table-striped mt-3">
             <thead>
                 <tr>
-                    <!--<th>ID</th> -->
                     <th>Tidspunkt</th>
                     <th>CPR-nummer</th>
                     <th>Puls (bpm)</th>
@@ -41,7 +30,6 @@
             <tbody>
                 {% for record in records %}
                     <tr>
-                        <!--<td>{{ record.id }}</td>-->
                         <td>{{ record.tidspunkt }}</td>
                         <td>{{ record.cpr_nummer }}</td>
                         <td>{{ record.puls }}</td>
@@ -50,20 +38,21 @@
                 {% endfor %}
             </tbody>
         </table>
-        
-        <!-- Request Update Button -->
-        <div class="mt-3">
-            <form action="{{ url_for('vitale.request_update') }}" method="POST">
-                <!-- Hidden input to pass CPR number -->
-                <input type="hidden" name="cpr" value="{{ cpr }}">
-                <button type="submit" class="btn btn-warning">Request Update</button>
-            </form>
-        </div>
-        
     {% elif cpr %}
         <p>Ingen vitale tegn fundet for CPR-nummeret: <strong>{{ cpr }}</strong>.</p>
     {% else %}
         <p>Indtast venligst patientens CPR-nummer.</p>
+    {% endif %}
+
+    <!-- Always show the Request Update Button -->
+    {% if cpr %}
+        <div class="mt-3">
+            <form action="{{ url_for('vitale.request_update') }}" method="POST">
+                <!-- Hidden input to pass CPR number -->
+                <input type="hidden" name="cpr" value="{{ cpr }}">
+                <button type="submit" class="btn btn-info">Request Update</button>
+            </form>
+        </div>
     {% endif %}
 {% endif %}
 

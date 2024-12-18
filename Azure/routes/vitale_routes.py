@@ -1,7 +1,7 @@
 # routes/vitale_routes.py
 
 from flask import render_template, request, flash, redirect, url_for, current_app
-from flask_login import login_required
+from flask_login import login_required, current_user
 from datetime import datetime
 import re
 from encryption import decrypt_data
@@ -9,6 +9,21 @@ from models import db, VitaleTegn
 from . import vitale_bp
 import paho.mqtt.client as mqtt  # Import the MQTT client
 from config import Config
+import logging
+
+# Configure logging for audit logs
+audit_logger = logging.getLogger("audit")
+audit_logger.setLevel(logging.INFO)
+
+# Avoid adding multiple handlers if this code runs multiple times
+if not audit_logger.handlers:
+    file_handler = logging.FileHandler("audit.log")
+    # Define the formatter with named placeholders
+    formatter = logging.Formatter(
+        "%(asctime)s - USER: %(username)s - CPR: %(cpr)s - RECORDS_FETCHED: %(records_fetched)d"
+    )
+    file_handler.setFormatter(formatter)
+    audit_logger.addHandler(file_handler)
 
 @vitale_bp.route("/vis_vitale_tegn", methods=["GET", "POST"])
 @login_required
@@ -53,6 +68,16 @@ def vis_vitale_tegn():
             pagination = query.order_by(VitaleTegn.tidspunkt.desc()).paginate(page=page, per_page=10)
             records = pagination.items
 
+            # Log the audit information with named fields using 'extra'
+            audit_logger.info(
+                "Fetched records",
+                extra={
+                    'username': current_user.username,
+                    'cpr': cpr,
+                    'records_fetched': len(records)
+                }
+            )
+
             if records:
                 flash(f"Vitale tegn fundet for CPR-nummer: {cpr}", "success")
             else:
@@ -84,7 +109,6 @@ def vis_vitale_tegn():
         date_from=date_from,
         date_to=date_to
     )
-
 
 @vitale_bp.route("/request_update", methods=["POST"])
 @login_required
