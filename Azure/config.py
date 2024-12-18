@@ -4,13 +4,14 @@ from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
 
 class Config:
-    MQTT_BROKER_URL = "192.168.87.2"
+    MQTT_BROKER_URL = "localhost"
     MQTT_BROKER_PORT = 1883
     MQTT_KEEPALIVE = 60
-    MQTT_TOPIC = "sundhedstjek"
-    MQTT_CLIENT_ID = "aeldre1"
-    MQTT_USERNAME = ""
-    MQTT_PASSWORD = ""
+    MQTT_TOPIC = "sundhed/data"
+    MQTT_CONTROL_TOPIC = "sundhed/control"
+    MQTT_CLIENT_ID = "Plejehjem1"
+    MQTT_USERNAME = "Plejehjem1"
+    MQTT_PASSWORD = "P987lejehjem1."
 
     # Fetch credentials from environment variables with default values
     DB_USERNAME = os.getenv('DB_USERNAME', 'SA')

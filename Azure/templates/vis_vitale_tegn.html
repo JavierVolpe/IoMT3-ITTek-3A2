@@ -16,7 +16,7 @@
 {% endwith %}
 
 <!-- CPR Number Form -->
-<form action="{{ url_for('vis_vitale_tegn') }}" method="POST">
+<form action="{{ url_for('vitale.vis_vitale_tegn') }}" method="POST">
     <div class="mb-3">
         <label for="cpr" class="form-label">Indtast patientens CPR-nummer</label>
         <input type="text" class="form-control" id="cpr" name="cpr" placeholder="010203-1234" value="{{ cpr if cpr else '010101-1111' }}" required>
@@ -35,17 +35,17 @@
                     <th>Tidspunkt</th>
                     <th>CPR-nummer</th>
                     <th>Puls (bpm)</th>
-                    <th>Temperatur (°C)</th>
+                    <th>Batteriniveau (%)</th>
                 </tr>
             </thead>
             <tbody>
                 {% for record in records %}
                     <tr>
-                       <!-- <td>{{ record.id }}</td> -->
+                        <!--<td>{{ record.id }}</td>-->
                         <td>{{ record.tidspunkt }}</td>
                         <td>{{ record.cpr_nummer }}</td>
                         <td>{{ record.puls }}</td>
-                        <td>{{ record.temperatur }}</td>
+                        <td>{{ record.battery }}</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -53,7 +53,7 @@
         
         <!-- Request Update Button -->
         <div class="mt-3">
-            <form action="{{ url_for('request_update') }}" method="POST">
+            <form action="{{ url_for('vitale.request_update') }}" method="POST">
                 <!-- Hidden input to pass CPR number -->
                 <input type="hidden" name="cpr" value="{{ cpr }}">
                 <button type="submit" class="btn btn-warning">Request Update</button>

@@ -25,24 +25,30 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/' %}active{% endif %}" aria-current="page" href="{{ url_for('home') }}">Home</a>
+                        <!-- Updated to use 'main.home' -->
+                        <a class="nav-link {% if request.path == '/' %}active{% endif %}" aria-current="page" href="{{ url_for('main.home') }}">Home</a>
                     </li>
                     {% if current_user.is_authenticated %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/vis_vitale_tegn' %}active{% endif %}" href="{{ url_for('vis_vitale_tegn') }}">Vis vitale tegn</a>
+                        <!-- Updated to use 'vitale.vis_vitale_tegn' -->
+                        <a class="nav-link {% if request.path == '/vis_vitale_tegn' %}active{% endif %}" href="{{ url_for('vitale.vis_vitale_tegn') }}">Vis vitale tegn</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/profile' %}active{% endif %}" href="{{ url_for('profile') }}">Profil</a>
+                        <!-- Updated to use 'main.profile' -->
+                        <a class="nav-link {% if request.path == '/profile' %}active{% endif %}" href="{{ url_for('main.profile') }}">Profil</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+                        <!-- Updated to use 'auth.logout' -->
+                        <a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a>
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/login' %}active{% endif %}" href="{{ url_for('login') }}">Login</a>
+                        <!-- Updated to use 'auth.login' -->
+                        <a class="nav-link {% if request.path == '/login' %}active{% endif %}" href="{{ url_for('auth.login') }}">Login</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path == '/register' %}active{% endif %}" href="{{ url_for('register') }}">Register</a>
+                        <!-- Updated to use 'auth.register' -->
+                        <a class="nav-link {% if request.path == '/register' %}active{% endif %}" href="{{ url_for('auth.register') }}">Register</a>
                     </li>
                     {% endif %}
                 </ul>
