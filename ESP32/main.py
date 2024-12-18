@@ -5,30 +5,15 @@ from time import ticks_ms, ticks_diff, ticks_add
 
 # Pin Definitions
 ADC_PIN = 32
-<<<<<<< HEAD
 VIBRATION_MOTOR_PIN = 27
 RESET_BUTTON_PIN = 2
 EMERGENCY_BUTTON_PIN = 15
 PULSE_SENSOR_PIN = 34
 I2C_SCL_PIN = 22
 I2C_SDA_PIN = 21
-=======
-
-# Hardware Configuration
-vibration_motor = PWM(Pin(27))
-vibration_motor.freq(1000)
-reset_button = Pin(2, Pin.IN, Pin.PULL_UP)
-emergency_button = Pin(16, Pin.IN, Pin.PULL_UP)
-pulse_sensor = ADC(Pin(34))
-pulse_sensor.width(ADC.WIDTH_12BIT)
-pulse_sensor.atten(ADC.ATTN_11DB)
-i2c = I2C(0, scl=Pin(22), sda=Pin(21), freq=400000)
-bat_adc = ADC(Pin(ADC_PIN))
-bat_adc.atten(ADC.ATTN_11DB)
->>>>>>> d9ad6a09e47cf8f43e6915c312960e4ca66a7e14
 
 # MQTT Configuration
-MQTT_SERVER = "192.168.137.91"
+MQTT_SERVER = "gruppe3a2"
 MQTT_USER = "user2"
 MQTT_PASS = "U987ser2."
 TOPIC_PUB = b"sundhed/data"
@@ -109,7 +94,7 @@ def set_vibration(intensity):
     vibration_motor.duty(intensity)
 
 # Vibration Helper Function
-async def vibrate(duration_sec=2, intensity=1023):
+async def vibrate(duration_sec=2, intensity=800):
     """
     Activates the vibration motor at the specified intensity for the given duration.
 
@@ -133,7 +118,6 @@ def mqtt_callback(topic, msg):
                 
                 if message.split(":")[0] == "send_update":
                     print("Requested update. Sending.")
-                    calculate_battery_percentage()
                     asyncio.create_task(publish_update())
                 elif message.split(":")[0] == "reset":
                     print("Reset command received.")
@@ -172,7 +156,7 @@ def calculate_battery_percentage():
     if voltage >= BATTERY_MAX_VOLT:
         return 100
     battery_message = (voltage - BATTERY_MIN_VOLT) / (BATTERY_MAX_VOLT - BATTERY_MIN_VOLT) * 100
-    message = f"BAT:{MQTT_ID}:{battery_message:.1f}"
+    message = str(f"BAT:{MQTT_ID}:{battery_message:.1f}")
     mqtt_client.publish(TOPIC_PUB, message.encode())
     print(f"Battery percentage published via MQTT. Voltage: {voltage:.2f}V, Percentage: {battery_message:.1f}%")
 
@@ -205,7 +189,7 @@ async def measure_bpm(duration_sec=30, vibration_duration_sec=2):
     print(f"Starting BPM measurement for {duration_sec} seconds...")
 
     # Start vibration for vibration_duration_sec seconds at the beginning of measurement
-    await vibrate(duration_sec=vibration_duration_sec, intensity=1023)  # Run vibration first
+    await vibrate(duration_sec=vibration_duration_sec, intensity=700)  # Run vibration first
 
     try:
         # Reset beat detection variables
@@ -292,7 +276,7 @@ async def fall_detection_task():
         if magnitude > ACCEL_THRESHOLD and not alarm_active:
             alarm_active = True
             print("Fall detected!")
-            set_vibration(1023)
+            set_vibration(700)
             # Start the fall alarm timeout task
             fall_alarm_timer = asyncio.create_task(fall_alarm_timeout())
         if alarm_active and reset_button.value() == 0:
@@ -340,7 +324,8 @@ async def publish_update():
     try:
         bpm = await measure_bpm()
         if bpm > 0:
-            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:{bpm}".encode())
+            bat_percent = str(calculate_battery_percentage())
+            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:{bpm}:{bat_percent}".encode())
         else:
             mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:Error".encode())
     finally:
@@ -362,14 +347,15 @@ async def connect_mqtt():
 
 # Main
 async def main():
-    write_mpu6050(0x6B, 0)  # Wake MPU6050
 
+    write_mpu6050(0x6B, 0)  # Wake MPU6050
     # Ensure the vibration motor is off at program start
     set_vibration(0)
     print("Vibration motor initialized to OFF.")
 
     try:
         await connect_mqtt()
+        mqtt_client.publish(TOPIC_PUB, "Start".encode())
     except Exception as e:
         print(f"Error MQTT : {e}")
 
@@ -386,11 +372,20 @@ async def main():
 
 # Run the main coroutine
 try:
+    
     asyncio.run(main())
+
 except Exception as e:
     print(f"Error: {e}")
 <<<<<<< HEAD
     #reset()
 =======
     # Optionally, reset or handle the error
->>>>>>> d9ad6a09e47cf8f43e6915c312960e4ca66a7e14
+
+
+
+
+
+
+
+
