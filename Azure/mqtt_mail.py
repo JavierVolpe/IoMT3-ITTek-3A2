@@ -1,12 +1,14 @@
 # mqtt_listener/mqtt_mail.py
 
 from time import sleep
+from datetime import datetime
 import paho.mqtt.client as mqtt
 from flask import current_app
 from app import app  # Import the Flask app instance
 from models import db, VitaleTegn
 from encryption import encrypt_data, decrypt_data
 from mqtt_listener import send_email  # Adjust the import path as needed
+import pytz
 
 # MQTT Configuration
 MQTT_LOCAL_BROKER = "20.0.194.60"
@@ -21,9 +23,10 @@ def insert_data(cpr, pulse, battery):
             encrypted_cpr = encrypt_data(cpr)
             encrypted_pulse = encrypt_data(str(pulse))
             encrypted_battery = encrypt_data(str(battery))
+            timestamp = datetime.now(pytz.timezone("Europe/Copenhagen")).strftime("%Y-%m-%d %H:%M:%S")  # Format datetime
 
             # Insert the encrypted data into the database
-            VitaleTegn.insert_data(cpr, pulse, battery)
+            VitaleTegn.insert_data(cpr, timestamp, pulse, battery)
 
             # Commit the transaction
             db.session.commit()
@@ -32,6 +35,7 @@ def insert_data(cpr, pulse, battery):
             db.session.rollback()
             app.logger.error(f"Error inserting data: {e}")
             return False
+
 
 def send_data(client, userdata, message):
     try:

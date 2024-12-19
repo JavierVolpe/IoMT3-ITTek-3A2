@@ -4,6 +4,7 @@ from datetime import datetime
 import hashlib
 from encryption import encrypt_data, decrypt_data
 from flask import current_app
+import pytz
 
 db = SQLAlchemy()
 
@@ -19,9 +20,10 @@ class VitaleTegn(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     cpr_nummer = db.Column(db.String(256), nullable=False)  # Encrypted CPR
     cpr_hash = db.Column(db.String(64), nullable=False, index=True)  # Hashed CPR for search
-    tidspunkt = db.Column(db.DateTime, nullable=False, default=db.func.current_timestamp())
+    tidspunkt = db.Column(db.DateTime, nullable=False, default=datetime.now(pytz.timezone('Europe/Copenhagen')))
     puls = db.Column(db.String(256), nullable=False)  # Encrypted puls
     battery = db.Column(db.String(256), nullable=True)  # Encrypted battery
+    
     
     def __repr__(self):
         return f"<VitaleTegn {self.cpr_nummer}>"
@@ -31,17 +33,19 @@ class VitaleTegn(db.Model):
         return hashlib.sha256(cpr.encode('utf-8')).hexdigest()
 
     @staticmethod
-    def insert_data(cpr, pulse, battery):
+    def insert_data(cpr, timestamp, pulse, battery):
         encrypted_cpr = encrypt_data(cpr)
         encrypted_puls = encrypt_data(str(pulse))
         encrypted_battery = encrypt_data(str(battery))
         cpr_hash = VitaleTegn.hash_cpr(cpr)
+        timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
 
         new_record = VitaleTegn(
             cpr_nummer=encrypted_cpr,
             cpr_hash=cpr_hash,
             puls=encrypted_puls,
-            battery=encrypted_battery
+            battery=encrypted_battery,
+            tidspunkt=timestamp
         )
         db.session.add(new_record)
         try:

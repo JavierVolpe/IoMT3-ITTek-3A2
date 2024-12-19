@@ -4,21 +4,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from models import db, Users
 from . import auth_bp
 import logging
-from datetime import datetime
 
-# Configure logging for audit logs
+# Use the audit logger configured in app.py
 audit_logger = logging.getLogger("audit")
-audit_logger.setLevel(logging.INFO)
-
-# Avoid adding multiple handlers if this code runs multiple times
-if not audit_logger.handlers:
-    file_handler = logging.FileHandler("audit.log")
-    formatter = logging.Formatter(
-        "%(asctime)s - USER: %(username)s - ACTION: %(action)s"
-    )
-    file_handler.setFormatter(formatter)
-    audit_logger.addHandler(file_handler)
-
 
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
@@ -40,37 +28,35 @@ def register():
             flash(f"Registration failed: {e}", "danger")
     return render_template("sign_up.html")
 
-
-
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username").strip()
         password = request.form.get("password").strip()
-        remember = request.form.get("remember") == 'on'  # Capture the remember option
+        remember = request.form.get("remember") == 'on'
 
         user = Users.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
             login_user(user, remember=remember)
-
-            # Log the successful login
             audit_logger.info(
                 "User logged in",
                 extra={
                     'username': username,
-                    'action': 'LOGIN_SUCCESS'
+                    'action': 'LOGIN',
+                    'cpr': 'not relevant',
+                    'records_fetched': 0
                 }
             )
-
             flash("Login successful.", "success")
             return redirect(url_for("main.home"))
         else:
-            # Optionally log failed login attempts (not required)
             audit_logger.info(
                 "Failed login attempt",
                 extra={
                     'username': username,
-                    'action': 'LOGIN_FAILED'
+                    'action': 'LOGIN_FAILED',
+                    'cpr': 'not relevant',
+                    'records_fetched': 0
                 }
             )
             flash("Invalid username or password.", "danger")
@@ -79,6 +65,15 @@ def login():
 @auth_bp.route("/logout")
 @login_required
 def logout():
+    audit_logger.info(
+        "User logged out",
+        extra={
+            'username': current_user.username,
+            'action': 'LOGOUT',
+            'cpr': 'not relevant',
+            'records_fetched': 0
+        }
+    )
     logout_user()
     flash("You have been logged out.", "info")
     return redirect(url_for("main.home"))
