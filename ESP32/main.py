@@ -111,7 +111,6 @@ def mqtt_callback(topic, msg):
         message = msg.decode()
         print("Received message:", message, "on topic:", topic.decode())
         
-        # Check if message has a colon, indicating device ID
         if ":" in message:
             if message.split(":")[1] == str(MQTT_ID):
                 print("Message is for this device. Processing.")
@@ -152,7 +151,7 @@ def read_battery_voltage():
 def calculate_battery_percentage():
     voltage = read_battery_voltage()
     if voltage <= BATTERY_MIN_VOLT:
-        return 0
+        return 0.1
     if voltage >= BATTERY_MAX_VOLT:
         return 100
     battery_percent = (voltage - BATTERY_MIN_VOLT) / (BATTERY_MAX_VOLT - BATTERY_MIN_VOLT) * 100
@@ -321,15 +320,16 @@ async def publish_update():
     bpm_measurement_running = True
     try:
         bpm = await measure_bpm()
+        bat_percent = str(int(calculate_battery_percentage()))
         if bpm > 0:
-            bat_percent = str(calculate_battery_percentage())
+            
             mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:{bpm}:{bat_percent}".encode())
         else:
-            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:Error".encode())
+            mqtt_client.publish(TOPIC_PUB, f"PULS:{MQTT_ID}:Error:{bat_percent}".encode())
     finally:
         bpm_measurement_running = False
     print("BPM data published via MQTT.")
-    reset_pulse_sensor()  # Reinitialize the pulse sensor
+    reset_pulse_sensor() 
     
 async def connect_mqtt():
     while True:
@@ -347,13 +347,12 @@ async def connect_mqtt():
 async def main():
 
     write_mpu6050(0x6B, 0)  # Wake MPU6050
-    # Ensure the vibration motor is off at program start
     set_vibration(0)
     print("Vibration motor initialized to OFF.")
 
     try:
         await connect_mqtt()
-        mqtt_client.publish("Debug", f"Start {MQTT_ID}".encode())
+        mqtt_client.publish("DEBUG", f"{MQTT_ID}:Start".encode())
     except Exception as e:
         print(f"Error MQTT : {e}")
 
@@ -365,12 +364,10 @@ async def main():
             mqtt_client.check_msg()  # Process incoming MQTT messages
         except Exception as e:
             print(f"Error checking MQTT messages: {e}")
-            # Optionally, attempt to reconnect or handle the error
         await asyncio.sleep(0.1)  # Small sleep to prevent tight looping
 
-# Run the main coroutine
+# Start program
 try:
-    
     asyncio.run(main())
 
 except Exception as e:
