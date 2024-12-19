@@ -13,12 +13,12 @@ I2C_SCL_PIN = 22
 I2C_SDA_PIN = 21
 
 # MQTT Configuration
-MQTT_SERVER = "gruppe3a2"
+MQTT_SERVER = "192.168.137.133"
 MQTT_USER = "user2"
 MQTT_PASS = "U987ser2."
 TOPIC_PUB = b"sundhed/data"
 TOPIC_SUB = b"sundhed/control"
-MQTT_ID = "010101-1111"
+MQTT_ID = "010101-1112"
 
 # BPM Measurement Constants
 MIN_BPM = 40
@@ -155,10 +155,8 @@ def calculate_battery_percentage():
         return 0
     if voltage >= BATTERY_MAX_VOLT:
         return 100
-    battery_message = (voltage - BATTERY_MIN_VOLT) / (BATTERY_MAX_VOLT - BATTERY_MIN_VOLT) * 100
-    message = str(f"BAT:{MQTT_ID}:{battery_message:.1f}")
-    mqtt_client.publish(TOPIC_PUB, message.encode())
-    print(f"Battery percentage published via MQTT. Voltage: {voltage:.2f}V, Percentage: {battery_message:.1f}%")
+    battery_percent = (voltage - BATTERY_MIN_VOLT) / (BATTERY_MAX_VOLT - BATTERY_MIN_VOLT) * 100
+    return battery_percent
 
 # Fall Alarm Timeout Function with Countdown
 async def fall_alarm_timeout():
@@ -355,7 +353,7 @@ async def main():
 
     try:
         await connect_mqtt()
-        mqtt_client.publish(TOPIC_PUB, "Start".encode())
+        mqtt_client.publish("Debug", f"Start {MQTT_ID}".encode())
     except Exception as e:
         print(f"Error MQTT : {e}")
 
@@ -377,15 +375,3 @@ try:
 
 except Exception as e:
     print(f"Error: {e}")
-<<<<<<< HEAD
-    #reset()
-=======
-    # Optionally, reset or handle the error
-
-
-
-
-
-
-
-
