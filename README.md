@@ -86,7 +86,7 @@ Installation
 1.  Klon projektet fra GitHub:
 
     ```
-    git clone <repository-url>
+    git clone https://github.com/JavierVolpe/IoMT3-ITTek-3A2
     ```
 
 2.  Installer afhængigheder:
