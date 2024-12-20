@@ -1,7 +1,5 @@
 import os
-from dotenv import load_dotenv
 
-load_dotenv()  # Load environment variables from .env file
 
 class Config:
     MQTT_BROKER_URL = "localhost"
@@ -14,14 +12,14 @@ class Config:
     MQTT_PASSWORD = "P987lejehjem1."
 
     # Fetch credentials from environment variables with default values
-    DB_USERNAME = os.getenv('DB_USERNAME', 'SA')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', 'M987yadmin.')
-    DB_HOST = os.getenv('DB_HOST', '20.254.112.3')
-    DB_PORT = os.getenv('DB_PORT', 1433)
-    DB_NAME = os.getenv('DB_NAME', 'vitale_tegn')
+    DB_USERNAME = "SA"
+    DB_PASSWORD = "M987yadmin."
+    DB_HOST = "20.254.112.3"
+    DB_PORT = "1433"
+    DB_NAME = "vitale_tegn"
 
     # AES encryption key (32 bytes for AES-256)
-    SECRET_KEY = os.getenv('SECRET_KEY', 'ijn9RML8M9EeNx3Y')  # Get SECRET_KEY from environment
+    SECRET_KEY = "ijn9RML8M9EeNx3Y"
 
     # Ensure SECRET_KEY is in bytes (not string)
     if isinstance(SECRET_KEY, str):
@@ -32,4 +30,4 @@ class Config:
         f"mssql+pymssql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     )
 
-    SQLALCHEMY_ECHO = False  # Enable SQLAlchemy echo for debugging (False in production)
+    SQLALCHEMY_ECHO = False  
