@@ -14,8 +14,8 @@ I2C_SDA_PIN = 21
 
 # MQTT Configuration
 MQTT_SERVER = "192.168.87.115"
-MQTT_USER = "user2"
-MQTT_PASS = "U987ser2."
+MQTT_USER = "User1"
+MQTT_PASS = "U987ser1."
 TOPIC_PUB = b"sundhed/data"
 TOPIC_SUB = b"sundhed/control"
 MQTT_ID = "010101-1112"
@@ -65,7 +65,8 @@ i2c = I2C(0, scl=Pin(I2C_SCL_PIN), sda=Pin(I2C_SDA_PIN), freq=400000)
 bat_adc = ADC(Pin(ADC_PIN))
 bat_adc.atten(ADC.ATTN_11DB)
 
-mqtt_client = MQTTClient(MQTT_ID, MQTT_SERVER, user=MQTT_USER, password=MQTT_PASS)
+mqtt_client = MQTTClient(MQTT_ID, MQTT_SERVER, user=MQTT_USER, password=MQTT_PASS, ssl=True)
+
 
 # MPU6050 Functions
 def write_mpu6050(reg, value):
