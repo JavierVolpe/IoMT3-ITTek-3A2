@@ -13,7 +13,7 @@ I2C_SCL_PIN = 22
 I2C_SDA_PIN = 21
 
 # MQTT Configuration
-MQTT_SERVER = "192.168.137.133"
+MQTT_SERVER = "192.168.87.115"
 MQTT_USER = "user2"
 MQTT_PASS = "U987ser2."
 TOPIC_PUB = b"sundhed/data"
