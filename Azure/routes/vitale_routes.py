@@ -11,6 +11,12 @@ from . import vitale_bp
 import paho.mqtt.client as mqtt
 from config import Config
 
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from io import BytesIO
+import base64
+
 audit_logger = logging.getLogger("audit")
 app_logger = logging.getLogger("app")
 
@@ -75,16 +81,61 @@ def vis_vitale_tegn():
 
     decrypted_records = []
     for record in records:
-        decrypted_cpr = decrypt_data(record.cpr_nummer)
-        decrypted_puls = decrypt_data(record.puls)
-        decrypted_battery = decrypt_data(record.battery) if record.battery else "N/A"
-        decrypted_records.append({
-            'id': record.id,
-            'cpr_nummer': decrypted_cpr,
-            'puls': decrypted_puls,
-            'battery': decrypted_battery,
-            'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')
-        })
+        try:
+            decrypted_cpr = decrypt_data(record.cpr_nummer)
+            decrypted_puls = decrypt_data(record.puls)
+            decrypted_battery = decrypt_data(record.battery) if record.battery else "N/A"
+            decrypted_records.append({
+                'id': record.id,
+                'cpr_nummer': decrypted_cpr,
+                'puls': decrypted_puls,
+                'battery': decrypted_battery,
+                'tidspunkt': record.tidspunkt.strftime('%Y-%m-%d %H:%M:%S')
+            })
+        except Exception as e:
+            app_logger.error(f"Decryption error for record ID {record.id}: {e}")
+            # Optionally, skip this record or handle it as needed
+
+    # NEW CODE BELOW
+    graph_data = None
+    if len(decrypted_records) > 5:
+        # Filter records where 'puls' can be converted to a float
+        valid_records = []
+        for r in decrypted_records:
+            try:
+                puls_float = float(r['puls'].replace(',', '.'))  # Ensure decimal separator is '.'
+                valid_records.append({'tidspunkt': r['tidspunkt'], 'puls': puls_float})
+            except ValueError:
+                app_logger.warning(f"Invalid pulse value '{r['puls']}' for CPR {cpr} at {r['tidspunkt']}.")
+
+        if len(valid_records) > 0:
+            # Sort records by timestamp to ensure the plot is chronological
+            valid_records.sort(key=lambda x: datetime.strptime(x['tidspunkt'], '%Y-%m-%d %H:%M:%S'))
+            timestamps = [r['tidspunkt'] for r in valid_records]
+            pulses = [r['puls'] for r in valid_records]
+
+            # Create a plot
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.plot(timestamps, pulses, marker='o', linestyle='-', color='blue')
+            ax.set_title('Puls over tid', fontsize=16)
+            ax.set_xlabel('Tidspunkt', fontsize=14)
+            ax.set_ylabel('Puls (bpm)', fontsize=14)
+            ax.grid(True)
+            fig.autofmt_xdate(rotation=45)
+
+            # Save the plot to a bytes buffer
+            buf = BytesIO()
+            plt.tight_layout()
+            fig.savefig(buf, format='png')
+            buf.seek(0)
+            graph_png = buf.getvalue()
+            buf.close()
+            plt.close(fig)
+
+            # Encode the PNG image to base64 string
+            graph_data = base64.b64encode(graph_png).decode('utf-8')
+        else:
+            app_logger.info(f"No valid pulse data available to plot for CPR {cpr}.")
 
     return render_template(
         "vis_vitale_tegn.html",
@@ -93,7 +144,8 @@ def vis_vitale_tegn():
         submitted=submitted,
         pagination=pagination,
         date_from=date_from,
-        date_to=date_to
+        date_to=date_to,
+        graph_data=graph_data
     )
 
 @vitale_bp.route("/request_update", methods=["POST"])

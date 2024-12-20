@@ -3,8 +3,6 @@
 
 <h1>Vis Vitale Tegn</h1>
 
-
-
 <!-- CPR Number Form -->
 <form action="{{ url_for('vitale.vis_vitale_tegn') }}" method="POST">
     <div class="mb-3">
@@ -38,6 +36,17 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        {% if records|length > 5 %}
+            {% if graph_data %}
+                <h3 class="mt-4">Graf over puls</h3>
+                <p>Denne graf viser puls over tid for CPR: {{ cpr }}</p>
+                <img src="data:image/png;base64,{{ graph_data }}" alt="Puls graf" class="img-fluid mt-3"/>
+            {% else %}
+                <p>Ingen gyldige pulsdata tilgængelige for at vise graf.</p>
+            {% endif %}
+        {% endif %}
+
     {% elif cpr %}
         <p>Ingen vitale tegn fundet for CPR-nummeret: <strong>{{ cpr }}</strong>.</p>
     {% else %}

@@ -8,25 +8,25 @@ import logging
 # Use the audit logger configured in app.py
 audit_logger = logging.getLogger("audit")
 
-@auth_bp.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        username = request.form.get("username").strip()
-        password = request.form.get("password").strip()
-        if not username or not password:
-            flash("Brugernavn og adgangskode er påkrævet.", "danger")
-            return render_template("sign_up.html")
-        try:
-            hashed_password = generate_password_hash(password, method="pbkdf2:sha1")
-            user = Users(username=username, password=hashed_password)
-            db.session.add(user)
-            db.session.commit()
-            flash("Registrering lykkedes! Log ind nu.", "success")
-            return redirect(url_for("auth.login"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"Registration failed: {e}", "danger")
-    return render_template("sign_up.html")
+# @auth_bp.route("/register", methods=["GET", "POST"])
+# def register():
+#     if request.method == "POST":
+#         username = request.form.get("username").strip()
+#         password = request.form.get("password").strip()
+#         if not username or not password:
+#             flash("Brugernavn og adgangskode er påkrævet.", "danger")
+#             return render_template("sign_up.html")
+#         try:
+#             hashed_password = generate_password_hash(password, method="pbkdf2:sha1")
+#             user = Users(username=username, password=hashed_password)
+#             db.session.add(user)
+#             db.session.commit()
+#             flash("Registrering lykkedes! Log ind nu.", "success")
+#             return redirect(url_for("auth.login"))
+#         except Exception as e:
+#             db.session.rollback()
+#             flash(f"Registration failed: {e}", "danger")
+#     return render_template("sign_up.html")
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
